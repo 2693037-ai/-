@@ -19,6 +19,8 @@ ORANGE = (255, 128, 0)
 CYAN = (0, 255, 255)         # [신규] 지그재그 적용 색상
 PURPLE = (147, 112, 219)     # [신규] 보스용 색상
 HOT_PINK = (255, 105, 180)   # [신규] 체력 회복 아이템 색상
+LIME = (180, 255, 60)        # [신규] 분열 적(대) 색상
+LIME_DARK = (100, 200, 30)   # [신규] 분열 적(소) 색상
 # FPS 조절을 위한 시계 설정
 clock = pygame.time.Clock()
 FPS = 60
@@ -38,8 +40,15 @@ bullet_radius = 5
 enemy_bullets = []
 enemy_bullet_speed = 5
 enemy_bullet_radius = 4
+
 # [구조 변경] 적 리스트 내부 요소: [x, y, 적 종류, 현재 체력, 시작 X 좌표]
-# - 적 종류(type): 0(일반), 1(미사일), 2(750점 정예 노란네모), 3(지그재그 고속 민트다이아몬드)
+# - 적 종류(type):
+#     0: 일반(빨간 네모)
+#     1: 미사일(주황 네모)
+#     2: 정예(노란 네모, 체력 3)
+#     3: 지그재그 고속(민트 다이아몬드)
+#     4: 분열 대형(라임 육각형, 처치 시 소형 2개로 분열)
+#     5: 분열 소형(어두운 라임 삼각형, 처치 시 점수만 획득)
 enemies = []  
 enemy_width = 40
 enemy_height = 40
@@ -80,9 +89,7 @@ laser_damaged_player = False
 stars = []
 for _ in range(50):
     size = random.choices([1, 1, 1, 2], weights=[5, 5, 5, 1])[0]
-    # 크기에 따른 속도 설정 (아주 느리게 흘러가도록)
     speed = 0.3 if size == 1 else 0.7
-    # 깊이감에 따른 별의 밝기(색상) 설정 (어둡고 은은하게)
     color_val = random.randint(40, 80) if size == 1 else random.randint(70, 120)
     color = (color_val, color_val, min(255, color_val + random.randint(0, 20)))
     stars.append([random.randint(0, SCREEN_WIDTH), random.randint(0, SCREEN_HEIGHT), size, speed, color])
@@ -109,6 +116,63 @@ def spawn_particles(x, y, color, count=15):
             'max_life': life,
             'color': color
         })
+
+# ──────────────────────────────────────────────
+# [신규] 분열 적 소형 2마리를 생성하는 함수
+# 대형 적이 파괴된 위치(cx, cy)에서 좌우로 퍼져나가며 스폰됨
+# 소형 적 크기: 24x24 (대형의 60%)
+# ──────────────────────────────────────────────
+SPLIT_WIDTH  = 24
+SPLIT_HEIGHT = 24
+
+def spawn_split_enemies(cx, cy):
+    """
+    분열 대형 적(type 4) 처치 시 호출.
+    cx, cy: 대형 적의 중심 좌표.
+    소형 적(type 5) 2마리를 좌우 35° 방향으로 스폰한다.
+    데이터 구조: [x, y, type, hp, start_x, dx, dy]
+      - dx, dy: 소형 전용 속도 벡터 (일반 적과 달리 대각선으로 이동)
+    """
+    for side in (-1, 1):          # -1: 왼쪽, +1: 오른쪽
+        angle = math.radians(35)  # 좌우 35도 분열각
+        dx = side * enemy_speed * math.sin(angle)
+        dy =       enemy_speed * math.cos(angle)
+        spawn_x = cx - SPLIT_WIDTH  // 2
+        spawn_y = cy - SPLIT_HEIGHT // 2
+        # [x, y, type, hp, start_x, dx, dy]
+        enemies.append([spawn_x, spawn_y, 5, 1, spawn_x, dx, dy])
+
+# ──────────────────────────────────────────────
+# [신규] 적 체력바 그리기 헬퍼 함수
+# 적 몸체 바로 위에 체력바를 표시한다.
+#   ex, ey      : 적의 좌상단 픽셀 좌표
+#   w           : 적의 폭 (체력바 너비 기준)
+#   hp, max_hp  : 현재/최대 체력
+# 체력 비율에 따라 색상이 녹색→노란→빨간 순으로 변한다.
+# 체력이 꽉 찬(hp == max_hp) 경우에는 표시하지 않는다.
+# ──────────────────────────────────────────────
+hp_font = pygame.font.SysFont("arial", 14, bold=True)
+
+def draw_hp_number(surface, ex, ey, w, h, hp, max_hp):
+    ratio = hp / max_hp
+    if ratio > 0.6:
+        color = WHITE
+    elif ratio > 0.3:
+        color = YELLOW
+    else:
+        color = RED
+    text = hp_font.render(str(hp), True, color)
+    outline = hp_font.render(str(hp), True, BLACK)
+    tx = ex + w // 2 - text.get_width()  // 2
+    ty = ey + h // 2 - text.get_height() // 2
+    # 외곽선: 상하좌우 1px 오프셋으로 검은 텍스트 먼저 그리기
+    for ox, oy in ((-1,0),(1,0),(0,-1),(0,1)):
+        surface.blit(outline, (tx + ox, ty + oy))
+    surface.blit(text, (tx, ty))
+
+auto_fire_counter = 0   # 자동 연사 쿨다운 카운터
+AUTO_FIRE_INTERVAL = 12  # 연사 간격 (프레임, 60fps 기준 약 0.2초)
+
 # 메인 게임 루프
 running = True
 while running:
@@ -117,60 +181,49 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        
+
         if event.type == pygame.KEYDOWN:
             if game_over:
                 if event.key == pygame.K_r:
                     player_x = (SCREEN_WIDTH // 2) - (player_width // 2)
                     player_y = SCREEN_HEIGHT - player_height - 20
-                    player_hp = player_max_hp # HP 리셋
+                    player_hp = player_max_hp
                     bullets.clear()
                     enemy_bullets.clear() 
                     enemies.clear()
                     items.clear()
-                    particles.clear() # 파티클 초기화
-                    
+                    particles.clear()
+
                     triple_shot_active = False
                     triple_shot_start_time = 0
-                    
+                    auto_fire_counter = AUTO_FIRE_INTERVAL
+
                     boss_active = False
                     boss_hp = 0
-                    boss_spawned_count = 0 # 보스 카운트 리셋
-                    
-                    # 레이저 상태 리셋
+                    boss_spawned_count = 0
+
                     laser_state = 0
                     laser_state_timer = 0
                     laser_spawn_counter = 0
                     laser_x = 0
                     laser_y = 0
                     laser_damaged_player = False
-                    
+
                     score = 0
                     game_over = False
             else:
-                if event.key == pygame.K_SPACE:
-                    current_time = pygame.time.get_ticks()
-                    # Pygame 내장 타이머를 사용한 버프 시간 활성 여부 체크
-                    is_triple_active = triple_shot_active and (current_time < triple_shot_start_time + triple_shot_duration)
-                    
-                    if is_triple_active:
-                        bullets.append([player_x + (player_width // 2), player_y, 0, -bullet_speed])
-                        angle_rad = math.radians(30)
-                        dx_diagonal = bullet_speed * math.sin(angle_rad)
-                        dy_diagonal = -bullet_speed * math.cos(angle_rad)
-                        bullets.append([player_x + (player_width // 2), player_y, -dx_diagonal, dy_diagonal])
-                        bullets.append([player_x + (player_width // 2), player_y, dx_diagonal, dy_diagonal])
-                    else:
-                        bullets.append([player_x + (player_width // 2), player_y, 0, -bullet_speed])
-    # [신규] 우주 배경 별 이동 업데이트 (게임오버 상태에서도 스크롤링 유지)
+                pass  # 발사는 아래 자동 연사 로직에서 처리
+
+    # 우주 배경 별 이동 업데이트
     for star in stars:
         star[1] += star[3]
         if star[1] > SCREEN_HEIGHT:
             star[1] = 0
             star[0] = random.randint(0, SCREEN_WIDTH)
+
     # --- 게임 로직 업데이트 ---
     if not game_over:
-        # [신규] 점수에 따른 탄환 크기 및 속도 강화 시스템
+        # 점수에 따른 탄환 크기 및 속도 강화 시스템
         if score >= 3000:
             bullet_speed = 13
             bullet_radius = 8
@@ -191,6 +244,7 @@ while running:
             bullet_radius = 5
             enemy_bullet_speed = 5.0
             enemy_bullet_radius = 4
+
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT] and player_x > 0:
             player_x -= player_speed
@@ -200,22 +254,43 @@ while running:
             player_y -= player_speed
         if keys[pygame.K_DOWN] and player_y < SCREEN_HEIGHT - player_height:
             player_y += player_speed
-        # [신규] 버프 타이머 업데이트
+
+        # ── 자동 연사: 스페이스바를 누르고 있으면 쿨다운마다 발사 ──────
+        if keys[pygame.K_SPACE]:
+            auto_fire_counter += 1
+            if auto_fire_counter >= AUTO_FIRE_INTERVAL:
+                auto_fire_counter = 0
+                current_time = pygame.time.get_ticks()
+                is_triple_active = triple_shot_active and (current_time < triple_shot_start_time + triple_shot_duration)
+                if is_triple_active:
+                    bullets.append([player_x + (player_width // 2), player_y, 0, -bullet_speed])
+                    angle_rad = math.radians(30)
+                    dx_diagonal = bullet_speed * math.sin(angle_rad)
+                    dy_diagonal = -bullet_speed * math.cos(angle_rad)
+                    bullets.append([player_x + (player_width // 2), player_y, -dx_diagonal, dy_diagonal])
+                    bullets.append([player_x + (player_width // 2), player_y,  dx_diagonal, dy_diagonal])
+                else:
+                    bullets.append([player_x + (player_width // 2), player_y, 0, -bullet_speed])
+        else:
+            auto_fire_counter = AUTO_FIRE_INTERVAL  # 키를 떼면 즉시 발사 준비 상태로
+
+        # 버프 타이머 업데이트
         current_time = pygame.time.get_ticks()
         if triple_shot_active and current_time >= triple_shot_start_time + triple_shot_duration:
             triple_shot_active = False
-            print("Power-up Deactivated!")
-        # [신규] 파티클 업데이트
+
+        # 파티클 업데이트
         for particle in particles[:]:
             particle['x'] += particle['dx']
             particle['y'] += particle['dy']
             particle['life'] -= 1
             if particle['life'] <= 0:
                 particles.remove(particle)
-        # [신규] 맵 횡단 레이저 업데이트
+
+        # 맵 횡단 레이저 업데이트
         if laser_state == 0:
             laser_spawn_counter += 1
-            if laser_spawn_counter >= 450:  # 7.5초 간격으로 출현
+            if laser_spawn_counter >= 450:
                 laser_state = 1
                 laser_state_timer = 0
                 laser_x = random.randint(50, SCREEN_WIDTH - 50)
@@ -224,12 +299,11 @@ while running:
                 laser_spawn_counter = 0
         elif laser_state == 1:
             laser_state_timer += 1
-            if laser_state_timer >= 90:  # 1.5초간 경고선 표시
+            if laser_state_timer >= 90:
                 laser_state = 2
                 laser_state_timer = 0
         elif laser_state == 2:
             laser_state_timer += 1
-            # 충돌 판정 (플레이어가 피해를 입지 않았을 때 한정)
             if not laser_damaged_player:
                 player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
                 laser_h_rect = pygame.Rect(0, laser_y - laser_height // 2, SCREEN_WIDTH, laser_height)
@@ -240,27 +314,28 @@ while running:
                     spawn_particles(player_x + player_width // 2, player_y + player_height // 2, RED, 20)
                     if player_hp <= 0:
                         game_over = True
-            # 레이저 선상에 빨간 파티클 스파크 가끔 생성
             if random.random() < 0.4:
                 spawn_particles(random.randint(0, SCREEN_WIDTH), laser_y, RED, 2)
                 spawn_particles(laser_x, random.randint(0, SCREEN_HEIGHT), RED, 2)
-            
-            if laser_state_timer >= 30:  # 0.5초간 레이저 발사
+            if laser_state_timer >= 30:
                 laser_state = 0
                 laser_state_timer = 0
+
         # 플레이어 미사일 위치 업데이트
         for bullet in bullets[:]:
             bullet[0] += bullet[2]
             bullet[1] += bullet[3]
             if bullet[1] < 0 or bullet[0] < 0 or bullet[0] > SCREEN_WIDTH:
                 bullets.remove(bullet)
-        # 적 미사일 위치 업데이트 (구조 변경 반영)
+
+        # 적 미사일 위치 업데이트
         for e_bullet in enemy_bullets[:]:
             e_bullet[0] += e_bullet[2]
             e_bullet[1] += e_bullet[3]
             if e_bullet[1] > SCREEN_HEIGHT or e_bullet[0] < 0 or e_bullet[0] > SCREEN_WIDTH:
                 enemy_bullets.remove(e_bullet)
-        # [신규] 보스 출현 트리거 검사 (1000점 단위로 등장)
+
+        # 보스 출현 트리거 검사
         next_boss_score = 1000 * (boss_spawned_count + 1)
         if score >= next_boss_score and not boss_active:
             boss_active = True
@@ -270,11 +345,10 @@ while running:
             boss_y = 50
             boss_direction = 1
             boss_shoot_counter = 0
-            # 기존 일반 적과 미사일 제거하여 보스전에 집중
             enemies.clear()
             enemy_bullets.clear()
-            print("Boss Spawned!")
-        # [신규] 보스 로직 업데이트
+
+        # 보스 로직 업데이트
         if boss_active:
             boss_x += boss_speed * boss_direction
             if boss_x <= 0:
@@ -283,304 +357,390 @@ while running:
             elif boss_x >= SCREEN_WIDTH - boss_width:
                 boss_x = SCREEN_WIDTH - boss_width
                 boss_direction = -1
-            
-            # 보스 미사일 발사 (3방향 부채꼴 발사)
+
             boss_shoot_counter += 1
-            if boss_shoot_counter >= 45:  # 약 0.75초 간격
+            if boss_shoot_counter >= 45:
                 enemy_bullets.append([boss_x + (boss_width // 2), boss_y + boss_height, 0, enemy_bullet_speed])
                 enemy_bullets.append([boss_x + 10, boss_y + boss_height, -0.3 * enemy_bullet_speed, enemy_bullet_speed])
                 enemy_bullets.append([boss_x + boss_width - 10, boss_y + boss_height, 0.3 * enemy_bullet_speed, enemy_bullet_speed])
                 boss_shoot_counter = 0
+
         # 적 생성 주기 관리 (보스 전투 중에는 일반 적 생성 일시 정지)
         if not boss_active:
             enemy_spawn_counter += 1
             if enemy_spawn_counter >= 30:
                 enemy_x = random.randint(0, SCREEN_WIDTH - enemy_width)
                 enemy_y = -enemy_height
-                
-                # [변경] 지그재그 적(Type 3) 추가된 적 생성 로직
+
+                # ── 적 생성 로직 (type 4 분열 적 포함) ──────────────────
                 # 데이터 구조: [x, y, 종류, 체력, 시작 X 좌표]
+                # type 4(분열 대형)는 체력 2. 소형(type 5)은 spawn_split_enemies()에서 생성.
                 if score >= 1250:
                     rand_val = random.random()
-                    if rand_val < 0.3:     # 30% 확률 미사일 적
+                    if rand_val < 0.20:    # 20% 미사일 적
                         enemies.append([enemy_x, enemy_y, 1, 1, enemy_x])
-                    elif rand_val < 0.6:   # 30% 확률 정예 노란색 적 (체력 3)
+                    elif rand_val < 0.40:  # 20% 정예 노란색 적
                         enemies.append([enemy_x, enemy_y, 2, 3, enemy_x])
-                    elif rand_val < 0.85:  # 25% 확률 지그재그 고속 적
+                    elif rand_val < 0.60:  # 20% 지그재그 고속 적
                         enemies.append([enemy_x, enemy_y, 3, 1, enemy_x])
-                    else:                  # 15% 확률 일반 적
+                    elif rand_val < 0.80:  # 20% 분열 대형 적
+                        enemies.append([enemy_x, enemy_y, 4, 2, enemy_x])
+                    else:                  # 20% 일반 적
                         enemies.append([enemy_x, enemy_y, 0, 1, enemy_x])
                 elif score >= 750:
                     rand_val = random.random()
-                    if rand_val < 0.3:
+                    if rand_val < 0.25:
                         enemies.append([enemy_x, enemy_y, 1, 1, enemy_x])
-                    elif rand_val < 0.55:
+                    elif rand_val < 0.45:
                         enemies.append([enemy_x, enemy_y, 2, 3, enemy_x])
-                    elif rand_val < 0.8:
+                    elif rand_val < 0.65:
                         enemies.append([enemy_x, enemy_y, 3, 1, enemy_x])
+                    elif rand_val < 0.85:  # 20% 분열 대형 적
+                        enemies.append([enemy_x, enemy_y, 4, 2, enemy_x])
                     else:
                         enemies.append([enemy_x, enemy_y, 0, 1, enemy_x])
                 elif score >= 500:
                     rand_val = random.random()
-                    if rand_val < 0.35:
+                    if rand_val < 0.25:
                         enemies.append([enemy_x, enemy_y, 1, 1, enemy_x])
-                    elif rand_val < 0.65:
+                    elif rand_val < 0.50:
+                        enemies.append([enemy_x, enemy_y, 3, 1, enemy_x])
+                    elif rand_val < 0.75:  # 25% 분열 대형 적
+                        enemies.append([enemy_x, enemy_y, 4, 2, enemy_x])
+                    else:
+                        enemies.append([enemy_x, enemy_y, 0, 1, enemy_x])
+                elif score >= 300:
+                    # 300점 이상부터 분열 적 첫 등장
+                    rand_val = random.random()
+                    if rand_val < 0.25:
+                        enemies.append([enemy_x, enemy_y, 4, 2, enemy_x])
+                    elif rand_val < 0.50:
                         enemies.append([enemy_x, enemy_y, 3, 1, enemy_x])
                     else:
                         enemies.append([enemy_x, enemy_y, 0, 1, enemy_x])
                 elif score >= 200:
-                    # 200점 이상부터 지그재그 고속 적 출현
                     if random.random() < 0.3:
                         enemies.append([enemy_x, enemy_y, 3, 1, enemy_x])
                     else:
                         enemies.append([enemy_x, enemy_y, 0, 1, enemy_x])
                 else:
-                    # 200점 미만: 일반 적만 생성
                     enemies.append([enemy_x, enemy_y, 0, 1, enemy_x])
-                    
+
                 enemy_spawn_counter = 0
-        # 적 위치 업데이트 및 미사일 발사
+
+        # ── 적 위치 업데이트 및 미사일 발사 ──────────────────────────────
         for enemy in enemies[:]:
-            # 노란색 정예 적(type 2)은 묵직하게 이동 속도를 조금 느리게(2) 해줍니다.
-            # 지그재그 고속 적(type 3)은 매우 빠르게(5) 하강합니다.
             if enemy[2] == 2:
                 current_enemy_speed = 2
             elif enemy[2] == 3:
                 current_enemy_speed = 5
+            elif enemy[2] == 4:
+                # 분열 대형: 묵직하게 천천히 내려옴 (체력 2)
+                current_enemy_speed = 2
+            elif enemy[2] == 5:
+                # 소형 분열 적: dx/dy 벡터로 대각선 이동
+                # (인덱스 5, 6에 dx/dy가 저장되어 있음)
+                enemy[0] += enemy[5]
+                enemy[1] += enemy[6]
+                # 화면 밖으로 나가면 제거
+                if (enemy[1] > SCREEN_HEIGHT or
+                        enemy[0] < -SPLIT_WIDTH or
+                        enemy[0] > SCREEN_WIDTH + SPLIT_WIDTH):
+                    if enemy in enemies:
+                        enemies.remove(enemy)
+                continue  # 소형은 별도 이동 처리했으므로 아래 코드 스킵
             else:
                 current_enemy_speed = enemy_speed
-            
+
             enemy[1] += current_enemy_speed
-            
-            # [신규] 지그재그 적(Type 3)의 좌우 사인파 비행 패턴
+
+            # 지그재그 적 사인파 비행
             if enemy[2] == 3:
                 enemy[0] = enemy[4] + math.sin(enemy[1] * 0.05) * 60
-                # 화면 경계 이탈 방지
                 if enemy[0] < 0:
                     enemy[0] = 0
                 elif enemy[0] > SCREEN_WIDTH - enemy_width:
                     enemy[0] = SCREEN_WIDTH - enemy_width
-            
+
             # 미사일 쏘는 적(type 1) 공격 로직
             if enemy[2] == 1 and random.random() < 0.015:
                 enemy_bullets.append([enemy[0] + (enemy_width // 2), enemy[1] + enemy_height, 0, enemy_bullet_speed])
+
             if enemy[1] > SCREEN_HEIGHT:
                 enemies.remove(enemy)
-        # 아이템 생성 주기 관리 (보스 전투 중에는 아이템이 생성되지 않음)
+
+        # 아이템 생성 주기 관리
         if not boss_active:
             item_spawn_counter += 1
             if item_spawn_counter >= 360: 
                 item_x = random.randint(0, SCREEN_WIDTH - item_width)
                 item_y = -item_height
-                # 70% 확률로 트리플 샷 (0), 30% 확률로 체력 회복 (1) 아이템 스폰
                 itype = 1 if random.random() < 0.3 else 0
                 items.append([item_x, item_y, itype])
                 item_spawn_counter = 0
+
         for item in items[:]:
             item[1] += item_speed
             if item[1] > SCREEN_HEIGHT:
                 items.remove(item)
-        # [중요 변경] 충돌 검사 1: 플레이어 미사일과 적의 충돌 (체력 깎기 및 파티클)
+
+        # ── 충돌 검사 1: 플레이어 미사일 vs 적 ────────────────────────────
         for bullet in bullets[:]:
-            bullet_rect = pygame.Rect(bullet[0] - bullet_radius, bullet[1] - bullet_radius, bullet_radius * 2, bullet_radius * 2)
-            
-            # 일반 적들과의 충돌 검사
+            bullet_rect = pygame.Rect(
+                bullet[0] - bullet_radius, bullet[1] - bullet_radius,
+                bullet_radius * 2, bullet_radius * 2
+            )
+
             for enemy in enemies[:]:
-                enemy_rect = pygame.Rect(enemy[0], enemy[1], enemy_width, enemy_height)
-                if bullet_rect.colliderect(enemy_rect):
-                    if bullet in bullets: 
+                # 분열 소형(type 5)은 SPLIT 크기 사용
+                if enemy[2] == 5:
+                    e_rect = pygame.Rect(enemy[0], enemy[1], SPLIT_WIDTH, SPLIT_HEIGHT)
+                else:
+                    e_rect = pygame.Rect(enemy[0], enemy[1], enemy_width, enemy_height)
+
+                if bullet_rect.colliderect(e_rect):
+                    if bullet in bullets:
                         bullets.remove(bullet)
-                    
-                    # 적 체력 1 감소
+
                     enemy[3] -= 1
-                    
-                    # 피격 스파크 파티클 생성
                     spawn_particles(bullet[0], bullet[1], WHITE, 4)
-                    
-                    # 체력이 0 이하가 되면 적을 처치하고 점수 획득
+
                     if enemy[3] <= 0:
-                        if enemy in enemies: 
+                        if enemy in enemies:
                             enemies.remove(enemy)
-                        
-                        # [신규] 적 타입별 폭발 파티클 색상 분기
-                        enemy_colors = {0: RED, 1: ORANGE, 2: YELLOW, 3: CYAN}
+
+                        enemy_colors = {0: RED, 1: ORANGE, 2: YELLOW, 3: CYAN, 4: LIME, 5: LIME_DARK}
                         target_color = enemy_colors.get(enemy[2], RED)
-                        spawn_particles(enemy[0] + enemy_width // 2, enemy[1] + enemy_height // 2, target_color, 12)
-                        
-                        # 적 종류별 점수 배정
-                        if enemy[2] == 2:
-                            score += 50   # 튼튼한 노란 네모는 50점!
-                        elif enemy[2] == 1:
-                            score += 20   # 미사일 적 20점
-                        elif enemy[2] == 3:
-                            score += 30   # 지그재그 고속 적 30점
+
+                        # 중심 좌표 계산 (대형 vs 소형 크기 분기)
+                        if enemy[2] == 5:
+                            cx = enemy[0] + SPLIT_WIDTH  // 2
+                            cy = enemy[1] + SPLIT_HEIGHT // 2
                         else:
-                            score += 10   # 일반 적 10점
-            # [신규] 보스와의 충돌 검사
+                            cx = enemy[0] + enemy_width  // 2
+                            cy = enemy[1] + enemy_height // 2
+
+                        spawn_particles(cx, cy, target_color, 12)
+
+                        # ── 분열 대형(type 4) 처치 → 소형 2마리 스폰 ──────
+                        if enemy[2] == 4:
+                            spawn_split_enemies(cx, cy)
+                            score += 20   # 대형 자체 처치 점수 (소형 각 15점 추가)
+                        elif enemy[2] == 5:
+                            score += 15   # 분열 소형 처치 점수
+                        elif enemy[2] == 2:
+                            score += 50
+                        elif enemy[2] == 1:
+                            score += 20
+                        elif enemy[2] == 3:
+                            score += 30
+                        else:
+                            score += 10
+
+                    break  # 한 탄환은 한 적만 맞춤
+
+            # 보스와의 충돌 검사
             if boss_active:
                 boss_rect = pygame.Rect(boss_x, boss_y, boss_width, boss_height)
                 if bullet_rect.colliderect(boss_rect):
                     if bullet in bullets:
                         bullets.remove(bullet)
-                    
                     boss_hp -= 1
-                    # 피격 스파크
                     spawn_particles(bullet[0], bullet[1], WHITE, 4)
-                    
-                    # 보스 처치
                     if boss_hp <= 0:
                         boss_active = False
                         score += 500
-                        # 대규모 폭발 이펙트
                         spawn_particles(boss_x + boss_width // 2, boss_y + boss_height // 2, PURPLE, 40)
-                        print("Boss Defeated!")
-        # [중요 변경] 충돌 검사 2: 플레이어와 적의 충돌 (체력 깎임 및 파티클)
+
+        # ── 충돌 검사 2: 플레이어 vs 적 ───────────────────────────────────
         player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
         for enemy in enemies[:]:
-            enemy_rect = pygame.Rect(enemy[0], enemy[1], enemy_width, enemy_height)
-            if player_rect.colliderect(enemy_rect):
+            if enemy[2] == 5:
+                e_rect = pygame.Rect(enemy[0], enemy[1], SPLIT_WIDTH, SPLIT_HEIGHT)
+            else:
+                e_rect = pygame.Rect(enemy[0], enemy[1], enemy_width, enemy_height)
+
+            if player_rect.colliderect(e_rect):
                 enemies.remove(enemy)
                 player_hp -= 1
                 spawn_particles(enemy[0] + enemy_width // 2, enemy[1] + enemy_height // 2, RED, 20)
                 if player_hp <= 0:
                     game_over = True
-        # [중요 변경] 충돌 검사 2-2: 플레이어와 적 미사일의 충돌 (체력 깎임)
+
+        # 플레이어 vs 적 미사일
         for e_bullet in enemy_bullets[:]:
-            eb_rect = pygame.Rect(e_bullet[0] - enemy_bullet_radius, e_bullet[1] - enemy_bullet_radius, enemy_bullet_radius * 2, enemy_bullet_radius * 2)
+            eb_rect = pygame.Rect(
+                e_bullet[0] - enemy_bullet_radius, e_bullet[1] - enemy_bullet_radius,
+                enemy_bullet_radius * 2, enemy_bullet_radius * 2
+            )
             if player_rect.colliderect(eb_rect):
                 enemy_bullets.remove(e_bullet)
                 player_hp -= 1
                 spawn_particles(player_x + player_width // 2, player_y + player_height // 2, ORANGE, 12)
                 if player_hp <= 0:
                     game_over = True
-        # [신규] 충돌 검사 2-3: 플레이어와 보스 본체의 직접 충돌
+
+        # 플레이어 vs 보스 본체
         if boss_active:
             boss_rect = pygame.Rect(boss_x, boss_y, boss_width, boss_height)
             if player_rect.colliderect(boss_rect):
                 player_hp = 0
                 spawn_particles(player_x + player_width // 2, player_y + player_height // 2, PURPLE, 30)
                 game_over = True
-        # 충돌 검사 3: 플레이어와 아이템의 충돌
+
+        # 플레이어 vs 아이템
         for item in items[:]:
             item_rect = pygame.Rect(item[0], item[1], item_width, item_height)
             if player_rect.colliderect(item_rect):
                 items.remove(item)
-                
                 item_type = item[2] if len(item) > 2 else 0
-                
                 if item_type == 1:
-                    # 체력 회복 아이템
                     if player_hp < player_max_hp:
                         player_hp += 1
-                        print("Power-up: HP Recovered!")
                     score += 15
-                    # 획득 이펙트 (핫핑크)
                     spawn_particles(item[0] + item_width // 2, item[1] + item_height // 2, HOT_PINK, 15)
                 else:
-                    # 트리플 샷 아이템
                     triple_shot_active = True
-                    triple_shot_start_time = pygame.time.get_ticks() # 파워업 시작 시간 기록
+                    triple_shot_start_time = pygame.time.get_ticks()
                     score += 30
-                    # 획득 이펙트 (초록색)
                     spawn_particles(item[0] + item_width // 2, item[1] + item_height // 2, GREEN, 15)
-                    print("Power-up Activated: Triple Shot!")
-    # --- 화면 그리기 ---
+
+    # ── 화면 그리기 ──────────────────────────────────────────────────────
     screen.fill(BLACK)
-    
-    # [신규] 우주 배경 별 그리기
+
+    # 우주 배경 별
     for star in stars:
         pygame.draw.circle(screen, star[4], (star[0], int(star[1])), star[2])
-    
+
     # 플레이어
     pygame.draw.rect(screen, BLUE, (player_x, player_y, player_width, player_height))
-    # 플레이어 미사일 (노란색)
+
+    # 플레이어 미사일
     for bullet in bullets:
         pygame.draw.circle(screen, YELLOW, (int(bullet[0]), int(bullet[1])), bullet_radius)
-    # 적 미사일 그리기 (주황색 원)
+
+    # 적 미사일
     for e_bullet in enemy_bullets:
         pygame.draw.circle(screen, ORANGE, (int(e_bullet[0]), int(e_bullet[1])), enemy_bullet_radius)
-    # 적 그리기
+
+    # ── 적 그리기 ────────────────────────────────────────────────────────
     for enemy in enemies:
-        # enemy[2] 종류에 따라 색상 분기
-        if enemy[2] == 2:
-            # 정예 적: 노란색 네모
-            pygame.draw.rect(screen, YELLOW, (enemy[0], enemy[1], enemy_width, enemy_height))
+        ex, ey = int(enemy[0]), int(enemy[1])
+
+        if enemy[2] == 0:
+            # 일반: 빨간 네모 (체력 1 → 풀피엔 바 숨김)
+            pygame.draw.rect(screen, RED, (ex, ey, enemy_width, enemy_height))
+            draw_hp_number(screen, ex, ey, enemy_width, enemy_height, enemy[3], 1)
+
         elif enemy[2] == 1:
-            # 미사일 적: 주황색 네모
-            pygame.draw.rect(screen, ORANGE, (enemy[0], enemy[1], enemy_width, enemy_height))
+            # 미사일: 주황 네모 (체력 1)
+            pygame.draw.rect(screen, ORANGE, (ex, ey, enemy_width, enemy_height))
+            draw_hp_number(screen, ex, ey, enemy_width, enemy_height, enemy[3], 1)
+
+        elif enemy[2] == 2:
+            # 정예: 노란 네모 (체력 3 → 피격마다 바 변화)
+            pygame.draw.rect(screen, YELLOW, (ex, ey, enemy_width, enemy_height))
+            draw_hp_number(screen, ex, ey, enemy_width, enemy_height, enemy[3], 3)
+
         elif enemy[2] == 3:
-            # [신규] 지그재그 고속 적: 민트색(CYAN) 다이아몬드형
-            point1 = (enemy[0] + enemy_width // 2, enemy[1])
-            point2 = (enemy[0], enemy[1] + enemy_height // 2)
-            point3 = (enemy[0] + enemy_width // 2, enemy[1] + enemy_height)
-            point4 = (enemy[0] + enemy_width, enemy[1] + enemy_height // 2)
-            pygame.draw.polygon(screen, CYAN, [point1, point2, point3, point4])
-        else:
-            # 일반 적: 빨간색 네모
-            pygame.draw.rect(screen, RED, (enemy[0], enemy[1], enemy_width, enemy_height))
-    # [신규] 보스 그리기
+            # 지그재그: 민트 다이아몬드 (체력 1)
+            pts = [
+                (ex + enemy_width // 2, ey),
+                (ex,                    ey + enemy_height // 2),
+                (ex + enemy_width // 2, ey + enemy_height),
+                (ex + enemy_width,      ey + enemy_height // 2),
+            ]
+            pygame.draw.polygon(screen, CYAN, pts)
+            draw_hp_number(screen, ex, ey, enemy_width, enemy_height, enemy[3], 1)
+
+        elif enemy[2] == 4:
+            # ── 분열 대형: 라임색 육각형 (체력 2) ──────────────────────
+            cx = ex + enemy_width  // 2
+            cy = ey + enemy_height // 2
+            rx, ry = enemy_width // 2, enemy_height // 2
+            hex_pts = []
+            for i in range(6):
+                a = math.radians(60 * i - 30)
+                hx = cx + int(rx * math.cos(a))
+                hy = cy + int(ry * math.sin(a))
+                hex_pts.append((hx, hy))
+            pygame.draw.polygon(screen, LIME, hex_pts)
+            pygame.draw.polygon(screen, WHITE, hex_pts, 2)
+            # 분열 대형은 체력바를 머리 위에 표시
+            draw_hp_number(screen, ex, ey, enemy_width, enemy_height, enemy[3], 2)
+
+        elif enemy[2] == 5:
+            # ── 분열 소형: 어두운 라임 삼각형 (체력 1) ─────────────────
+            pts = [
+                (ex + SPLIT_WIDTH // 2, ey + SPLIT_HEIGHT),
+                (ex,                    ey),
+                (ex + SPLIT_WIDTH,      ey),
+            ]
+            pygame.draw.polygon(screen, LIME_DARK, pts)
+            pygame.draw.polygon(screen, LIME,      pts, 2)
+            draw_hp_number(screen, ex, ey, SPLIT_WIDTH, SPLIT_HEIGHT, enemy[3], 1)
+
+    # 보스 그리기
     if boss_active:
         pygame.draw.rect(screen, PURPLE, (boss_x, boss_y, boss_width, boss_height))
-        pygame.draw.rect(screen, RED, (boss_x + 20, boss_y + 10, boss_width - 40, boss_height - 20)) # 코어
-        
-        # 보스 체력바
+        pygame.draw.rect(screen, RED, (boss_x + 20, boss_y + 10, boss_width - 40, boss_height - 20))
         health_bar_width = boss_width
         pygame.draw.rect(screen, RED, (boss_x, boss_y - 12, health_bar_width, 6))
         current_health_bar_width = int((boss_hp / boss_max_hp) * health_bar_width)
         pygame.draw.rect(screen, GREEN, (boss_x, boss_y - 12, current_health_bar_width, 6))
-    # [신규] 맵 횡단 레이저 그리기
+
+    # 맵 횡단 레이저
     if laser_state == 1:
-        # 경고선: 점멸하는 얇은 빨간 선 (수평 & 수직)
         if (pygame.time.get_ticks() // 100) % 2 == 0:
             pygame.draw.line(screen, RED, (0, laser_y), (SCREEN_WIDTH, laser_y), 2)
             pygame.draw.line(screen, RED, (laser_x, 0), (laser_x, SCREEN_HEIGHT), 2)
     elif laser_state == 2:
-        # 활성 레이저: 겉은 빨간색 글로우, 속은 흰색 광선 (수평 & 수직)
-        # 1. 수평 레이저
-        pygame.draw.rect(screen, RED, (0, laser_y - 8, SCREEN_WIDTH, 16))
+        pygame.draw.rect(screen, RED,   (0, laser_y - 8, SCREEN_WIDTH, 16))
         pygame.draw.rect(screen, WHITE, (0, laser_y - 3, SCREEN_WIDTH, 6))
-        # 2. 수직 레이저
-        pygame.draw.rect(screen, RED, (laser_x - 8, 0, 16, SCREEN_HEIGHT))
+        pygame.draw.rect(screen, RED,   (laser_x - 8, 0, 16, SCREEN_HEIGHT))
         pygame.draw.rect(screen, WHITE, (laser_x - 3, 0, 6, SCREEN_HEIGHT))
-    # [신규] 파티클 그리기
+
+    # 파티클
     for particle in particles:
-        # 시간이 지날수록 크기가 작아지며 서서히 사라지는 연출
         radius = int(max(1, (particle['life'] / particle['max_life']) * 5))
         pygame.draw.circle(screen, particle['color'], (int(particle['x']), int(particle['y'])), radius)
-    # 아이템 그리기 (트리플 샷: 초록 삼각형, 체력 회복: 빨간 십자가)
+
+    # 아이템
     for item in items:
         item_type = item[2] if len(item) > 2 else 0
         if item_type == 1:
-            # 체력 회복: 핫핑크 십자가 (+) 모양
             pygame.draw.rect(screen, HOT_PINK, (item[0] + item_width // 3, item[1], item_width // 3, item_height))
             pygame.draw.rect(screen, HOT_PINK, (item[0], item[1] + item_height // 3, item_width, item_height // 3))
         else:
-            # 트리플 샷: 초록 삼각형
             point1 = (item[0] + item_width // 2, item[1])
             point2 = (item[0], item[1] + item_height)
             point3 = (item[0] + item_width, item[1] + item_height)
             pygame.draw.polygon(screen, GREEN, [point1, point2, point3])
-    # HUD 정보 표시
+
+    # HUD
     score_text = font.render(f"Score: {score}", True, WHITE)
     screen.blit(score_text, (10, 10))
-    # [신규] 플레이어 체력(HP) 하트 UI 그리기
+
     hp_label = font.render("HP: ", True, WHITE)
     screen.blit(hp_label, (SCREEN_WIDTH - 150, 10))
     for i in range(player_max_hp):
         rect_color = GREEN if i < player_hp else BLACK
         pygame.draw.rect(screen, rect_color, (SCREEN_WIDTH - 95 + i * 25, 16, 18, 18))
-        pygame.draw.rect(screen, WHITE, (SCREEN_WIDTH - 95 + i * 25, 16, 18, 18), 2)
-    # [신규] 트리플 샷 파워업 상태 남은 시간 표시
+        pygame.draw.rect(screen, WHITE,      (SCREEN_WIDTH - 95 + i * 25, 16, 18, 18), 2)
+
     if triple_shot_active:
         remaining_time = max(0, (triple_shot_start_time + triple_shot_duration - current_time) / 1000.0)
         if remaining_time > 0:
             powerup_text = font.render(f"TRIPLE: {remaining_time:.1f}s", True, GREEN)
             screen.blit(powerup_text, (10, 45))
+
     if game_over:
-        over_text = game_over_font.render("GAME OVER", True, WHITE)
+        over_text    = game_over_font.render("GAME OVER", True, WHITE)
         restart_text = font.render("Press 'R' to Restart", True, WHITE)
-        screen.blit(over_text, (SCREEN_WIDTH // 2 - over_text.get_width() // 2, SCREEN_HEIGHT // 2 - 50))
+        screen.blit(over_text,    (SCREEN_WIDTH // 2 - over_text.get_width()    // 2, SCREEN_HEIGHT // 2 - 50))
         screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, SCREEN_HEIGHT // 2 + 20))
+
     pygame.display.flip()
+
 pygame.quit()
 sys.exit()
