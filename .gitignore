@@ -6,6 +6,18 @@ __pycache__/
 # C extensions
 *.so
 
+# VS Code 설정 폴더 무시
+.vscode/
+
+# 파이썬 가상환경 무시
+venv/
+.venv/
+env/
+
+# 파이썬 컴파일 파일 무시
+__pycache__/
+*.pyc
+
 # Distribution / packaging
 .Python
 build/
