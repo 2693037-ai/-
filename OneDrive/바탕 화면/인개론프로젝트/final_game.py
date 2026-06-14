@@ -904,7 +904,7 @@ def draw_hud():
         bbar_w = 300
         bbar_h = 16
         bbar_x = SCREEN_WIDTH//2 - bbar_w//2
-        bbar_y = HUD_HEIGHT + 6
+        bbar_y = 70 + 6
         ratio   = boss_hp / boss_max_hp if boss_max_hp else 0
         panel = pygame.Surface((bbar_w + 30, 40), pygame.SRCALPHA)
         panel.fill((10, 5, 20, 200))
