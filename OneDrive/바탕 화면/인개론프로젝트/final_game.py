@@ -450,10 +450,6 @@ AUGMENT_POOL = [
 augment_choices     = []
 augment_hover       = -1
 
-# ── 점수 증강 상태 ────────────────────────────────────────────────────────
-score_augment_threshold = 1000   # 다음 점수 증강 발동 기준
-_augment_return_state   = None   # 점수 증강 후 복귀할 wave_state
-_score_augment          = False  # 현재 증강이 점수 보너스 증강인지 여부
 
 def pick_augment_choices():
     global augment_choices
@@ -482,15 +478,9 @@ def apply_augment(aug_id):
         bullet_damage += 1
 
 def _finish_augment(aug_id):
-    """증강 적용 후 상태 전환 — 점수 증강이면 게임으로 복귀, 아니면 다음 웨이브 시작."""
-    global wave_state, _augment_return_state, _score_augment
+    global wave_state
     apply_augment(aug_id)
-    if _augment_return_state is not None:
-        wave_state            = _augment_return_state
-        _augment_return_state = None
-        _score_augment        = False
-    else:
-        start_wave(current_wave + 1)
+    start_wave(current_wave + 1)
 
 CARD_W, CARD_H = 142, 215
 CARD_GAP       = 7
@@ -684,7 +674,6 @@ def reset_game():
     global score, game_over, wave_clear_timer, boss_spawned_count
     global damage_flash_timer, invincible_timer, item_spawn_counter
     global _go_sound_played, _bgm_duck_timer
-    global score_augment_threshold, _augment_return_state, _score_augment
 
     player_x          = SCREEN_WIDTH//2 - player_width//2
     player_y          = SCREEN_HEIGHT   - player_height - 20
@@ -716,9 +705,6 @@ def reset_game():
 
     _go_sound_played        = False
     _bgm_duck_timer         = 0
-    score_augment_threshold = 1000
-    _augment_return_state   = None
-    _score_augment          = False
 
     # 게임 시작 전 증강 선택 (AI기말branch.py)
     global current_wave, wave_state
@@ -931,15 +917,9 @@ def draw_augment_screen(tick):
     pygame.draw.line(screen, HUD_BORDER, (0, 190), (SCREEN_WIDTH, 190), 1)
     pulse = 0.5 + 0.5 * math.sin(tick * 0.05)
     gold_pulse = (int(220 + 35*pulse), int(190 + 25*pulse), int(50 + 10*pulse))
-    if _score_augment:
-        bonus_col = (int(255), int(210 + 45*pulse), int(60 + 20*pulse))
-        draw_text_outlined(screen, "BONUS UPGRADE!", big_font, bonus_col,
-                           SCREEN_WIDTH//2 - big_font.size("BONUS UPGRADE!")[0]//2, 115, (80, 50, 0))
-        sub_text = f"점수 {score_augment_threshold - 1000:,}점 달성! 강화 아이템을 선택하세요"
-    else:
-        draw_text_outlined(screen, "증강 선택", big_font, gold_pulse,
-                           SCREEN_WIDTH//2 - big_font.size("증강 선택")[0]//2, 120, (60, 40, 0))
-        sub_text = "하나를 선택해 플레이어를 강화하세요"
+    draw_text_outlined(screen, "증강 선택", big_font, gold_pulse,
+                       SCREEN_WIDTH//2 - big_font.size("증강 선택")[0]//2, 120, (60, 40, 0))
+    sub_text = "하나를 선택해 플레이어를 강화하세요"
     sub = small_font.render(sub_text, True, (160, 180, 220))
     screen.blit(sub, (SCREEN_WIDTH//2 - sub.get_width()//2, 168))
 
@@ -1487,16 +1467,6 @@ while running:
                 sounds['item'].play()
 
         # ── 웨이브 클리어 판정 ───────────────────────────────────────────
-        # ── 점수 1000점마다 보너스 증강 ─────────────────────────────────────
-        if (not game_over and wave_state in ('playing', 'boss')
-                and score >= score_augment_threshold):
-            score_augment_threshold += 1000
-            _augment_return_state    = wave_state
-            _score_augment           = True
-            wave_state               = 'augment'
-            pick_augment_choices()
-            spawn_popup("BONUS UPGRADE!", SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 30, GOLD)
-
         if not game_over and wave_kills >= wave_kill_goal and len(enemies) == 0 and wave_state in ('playing','boss'):
             wave_state       = 'wave_clear'
             wave_clear_timer = 0
