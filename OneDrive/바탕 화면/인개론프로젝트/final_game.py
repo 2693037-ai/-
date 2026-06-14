@@ -188,24 +188,92 @@ def make_enemy_sprite(etype, w=40, h=40):
         pygame.draw.line(surf, (255, 80, 80), (w//2, 4), (w//2, h-9), 1)
     return surf
 
-def make_boss_sprite(w=80, h=48):
+def make_boss1_sprite(w=80, h=48):
+    """VULTURE — teal/cyan angular fighter"""
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
-    body = [
-        (w//2, 2), (w-8, 10), (w-4, h-4),
-        (w//2+6, h-10), (w//2, h-4),
-        (w//2-6, h-10), (4, h-4), (8, 10)
-    ]
-    pygame.draw.polygon(surf, (80, 30, 130), body)
-    pygame.draw.polygon(surf, (180, 80, 255), body, 2)
-    pygame.draw.polygon(surf, (60, 20, 100), [(8, 10), (0, h//2), (12, h*3//4)])
-    pygame.draw.polygon(surf, (60, 20, 100), [(w-8, 10), (w, h//2), (w-12, h*3//4)])
-    pygame.draw.circle(surf, (220, 100, 255), (w//2, h//2), 12)
-    pygame.draw.circle(surf, (255, 200, 255), (w//2, h//2), 7)
-    pygame.draw.circle(surf, (255, 255, 255), (w//2, h//2), 3)
-    for px in [w//2, w//4, w*3//4]:
-        pygame.draw.rect(surf, (200, 60, 255), (px-3, h-6, 6, 8))
-    pygame.draw.line(surf, (140, 60, 200), (w//4, h//4), (w*3//4, h//4), 1)
-    pygame.draw.line(surf, (140, 60, 200), (w//5, h//2), (w*4//5, h//2), 1)
+    # Main body
+    body = [(w//2, 2), (w-6, 12), (w-2, h-4), (w//2+8, h-12),
+            (w//2, h-6), (w//2-8, h-12), (2, h-4), (6, 12)]
+    pygame.draw.polygon(surf, (13, 74, 74), body)
+    pygame.draw.polygon(surf, (0, 220, 220), body, 2)
+    # Sharp angular wings
+    pygame.draw.polygon(surf, (8, 50, 50), [(6, 12), (0, h*2//3), (16, h*2//3)])
+    pygame.draw.polygon(surf, (8, 50, 50), [(w-6, 12), (w, h*2//3), (w-16, h*2//3)])
+    pygame.draw.polygon(surf, (0, 180, 180), [(6, 12), (0, h*2//3), (16, h*2//3)], 1)
+    pygame.draw.polygon(surf, (0, 180, 180), [(w-6, 12), (w, h*2//3), (w-16, h*2//3)], 1)
+    # Cockpit
+    pygame.draw.ellipse(surf, (0, 200, 200, 180), (w//2-5, h//6, 10, 12))
+    # Twin cannon barrels
+    pygame.draw.rect(surf, (0, 160, 160), (w//2-14, h-8, 5, 10))
+    pygame.draw.rect(surf, (0, 160, 160), (w//2+9,  h-8, 5, 10))
+    pygame.draw.rect(surf, (0, 255, 255), (w//2-13, h-4, 3, 6))
+    pygame.draw.rect(surf, (0, 255, 255), (w//2+10, h-4, 3, 6))
+    # Center line
+    pygame.draw.line(surf, (0, 220, 220), (w//2, 4), (w//2, h-14), 1)
+    return surf
+
+def make_boss2_sprite(w=80, h=48):
+    """INFERNO — orange/red flame beast"""
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    # Rounded fiery body
+    body = [(w//2, 2), (w-4, h//3), (w-2, h-4), (w//2, h-8), (2, h-4), (4, h//3)]
+    pygame.draw.polygon(surf, (180, 60, 0), body)
+    pygame.draw.polygon(surf, (255, 100, 0), body, 2)
+    # Flame-like jagged edges on sides
+    jagged_l = [(4, h//3), (0, h//3+6), (6, h//3+12), (0, h//3+18), (6, h//3+24), (2, h-4)]
+    jagged_r = [(w-4, h//3), (w, h//3+6), (w-6, h//3+12), (w, h//3+18), (w-6, h//3+24), (w-2, h-4)]
+    pygame.draw.lines(surf, (255, 140, 0), False, jagged_l, 2)
+    pygame.draw.lines(surf, (255, 140, 0), False, jagged_r, 2)
+    # Glowing core
+    pygame.draw.circle(surf, (255, 160, 0), (w//2, h//2), 10)
+    pygame.draw.circle(surf, (255, 220, 80), (w//2, h//2), 6)
+    pygame.draw.circle(surf, (255, 255, 200), (w//2, h//2), 3)
+    # Nozzle
+    pygame.draw.rect(surf, (140, 40, 0), (w//2-5, h-8, 10, 8))
+    pygame.draw.rect(surf, (255, 80, 0), (w//2-3, h-6, 6, 5))
+    return surf
+
+def make_boss3_sprite(w=80, h=48):
+    """SPECTER — green toxic/ghost"""
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    # Hexagonal organic body
+    pts = [(w//2+int((w//2-4)*math.cos(math.radians(60*i-90))),
+            h//2+int((h//2-4)*math.sin(math.radians(60*i-90)))) for i in range(6)]
+    pygame.draw.polygon(surf, (20, 80, 20), pts)
+    pygame.draw.polygon(surf, (80, 255, 80), pts, 2)
+    # Multiple eye-like circles
+    for ex2, ey2 in [(w//2-16, h//2-4), (w//2, h//2-8), (w//2+16, h//2-4)]:
+        pygame.draw.circle(surf, (0, 60, 0), (ex2, ey2), 7)
+        pygame.draw.circle(surf, (80, 255, 80), (ex2, ey2), 5)
+        pygame.draw.circle(surf, (200, 255, 200), (ex2, ey2), 2)
+    # Organic tendrils
+    pygame.draw.line(surf, (40, 180, 40), (pts[3][0], pts[3][1]), (0, h-2), 2)
+    pygame.draw.line(surf, (40, 180, 40), (pts[4][0], pts[4][1]), (w, h-2), 2)
+    # Toxic glow center
+    pygame.draw.circle(surf, (60, 200, 60, 120), (w//2, h*2//3), 6)
+    return surf
+
+def make_boss4_sprite(w=80, h=48):
+    """TITAN — dark gray/gold armored"""
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    # Main blocky armored body
+    pygame.draw.rect(surf, (50, 50, 60), (8, 4, w-16, h-8), border_radius=3)
+    pygame.draw.rect(surf, (200, 160, 30), (8, 4, w-16, h-8), 2, border_radius=3)
+    # Shoulder plates
+    pygame.draw.rect(surf, (40, 40, 50), (0, 10, 14, h-20), border_radius=2)
+    pygame.draw.rect(surf, (40, 40, 50), (w-14, 10, 14, h-20), border_radius=2)
+    pygame.draw.rect(surf, (200, 160, 30), (0, 10, 14, h-20), 1, border_radius=2)
+    pygame.draw.rect(surf, (200, 160, 30), (w-14, 10, 14, h-20), 1, border_radius=2)
+    # Thick armor borders
+    pygame.draw.rect(surf, (200, 160, 30), (8, 4, w-16, 4))
+    pygame.draw.rect(surf, (200, 160, 30), (8, h-8, w-16, 4))
+    # Gold emblem
+    pygame.draw.circle(surf, (200, 160, 30), (w//2, h//2), 10, 2)
+    pygame.draw.circle(surf, (230, 190, 60), (w//2, h//2), 5)
+    # Weapon mounts
+    for cx3 in [w//4, w*3//4]:
+        pygame.draw.rect(surf, (70, 70, 80), (cx3-4, h-10, 8, 12))
+        pygame.draw.rect(surf, (180, 140, 20), (cx3-4, h-10, 8, 12), 1)
     return surf
 
 def make_item_sprite(itype, w=30, h=30):
@@ -272,7 +340,7 @@ aug_desc_font  = load_korean_font(14)
 # ── 스프라이트 캐시 ───────────────────────────────────────────────────────
 PLAYER_SPRITE = make_player_sprite()
 ENEMY_SPRITES = {i: make_enemy_sprite(i) for i in range(7)}
-BOSS_SPRITE   = make_boss_sprite()
+BOSS_SPRITES  = {1: make_boss1_sprite(), 2: make_boss2_sprite(), 3: make_boss3_sprite(), 4: make_boss4_sprite()}
 ITEM_SPRITES  = {1: make_item_sprite(1)}
 
 _bullet_surf_cache = {}
@@ -360,6 +428,11 @@ boss_laser_counter        = 0
 boss_laser_xs             = []
 boss_laser_damaged_player = False
 BOSS_LASER_INTERVAL       = 450
+
+# ── 보스 인트로 / 돌진 ────────────────────────────────────────────────────
+boss_intro_timer  = 0
+boss_charge_timer = 0
+boss_charge_phase = 0   # 0=idle, 1=charging down, 2=returning up
 
 # ── 아이템 스폰 카운터 ───────────────────────────────────────────────────
 item_spawn_counter = 0
@@ -617,6 +690,7 @@ def start_wave(wave_num):
     global laser_damaged_player, wave_state, wave_kill_goal
     global boss_laser_state, boss_laser_timer, boss_laser_counter
     global boss_laser_xs, boss_laser_damaged_player, item_spawn_counter
+    global boss_intro_timer, boss_charge_timer, boss_charge_phase
 
     current_wave        = wave_num
     wave_kills          = 0
@@ -639,6 +713,9 @@ def start_wave(wave_num):
         boss_y             = 50
         boss_direction     = 1
         boss_shoot_counter = 0
+        boss_intro_timer   = 150
+        boss_charge_timer  = 0
+        boss_charge_phase  = 0
         wave_kill_goal     = 1
         wave_spawn_total   = 0
     else:
@@ -821,6 +898,9 @@ def draw_hud():
                          (bx, by, bw, bh), 1, border_radius=3)
 
     if wave_state == 'boss' and boss_active:
+        BOSS_NAMES = {1: "VULTURE", 2: "INFERNO", 3: "SPECTER", 4: "TITAN"}
+        boss_tier_hud = current_wave // BOSS_WAVE_INTERVAL
+        bname = BOSS_NAMES.get(((boss_tier_hud - 1) % 4) + 1, f"BOSS {boss_tier_hud}")
         bbar_w = 300
         bbar_h = 16
         bbar_x = SCREEN_WIDTH//2 - bbar_w//2
@@ -829,8 +909,14 @@ def draw_hud():
         panel = pygame.Surface((bbar_w + 30, 40), pygame.SRCALPHA)
         panel.fill((10, 5, 20, 200))
         screen.blit(panel, (bbar_x - 15, bbar_y - 14))
-        bl = small_font.render("BOSS", True, (200, 100, 255))
+        bl = small_font.render(bname, True, (200, 100, 255))
         screen.blit(bl, (bbar_x, bbar_y - 14))
+        # 보스 인트로 이름 표시
+        if boss_intro_timer > 0:
+            intro_alpha = min(255, boss_intro_timer * 3)
+            intro_surf = big_font.render(bname, True, (255, 200, 80))
+            intro_surf.set_alpha(intro_alpha)
+            screen.blit(intro_surf, (SCREEN_WIDTH//2 - intro_surf.get_width()//2, SCREEN_HEIGHT//2 - intro_surf.get_height()//2))
         pygame.draw.rect(screen, (30, 10, 50), (bbar_x, bbar_y, bbar_w, bbar_h), border_radius=4)
         if ratio > 0:
             fill_w = max(2, int(bbar_w * ratio))
@@ -1243,22 +1329,105 @@ while running:
         # ── 보스 웨이브 ──────────────────────────────────────────────────
         if wave_state == 'boss' and boss_active:
             boss_anim_timer += 1
-            boss_x += boss_speed * boss_direction
-            if boss_x <= 0:                          boss_x = 0;                       boss_direction = 1
-            elif boss_x >= SCREEN_WIDTH-boss_width:  boss_x = SCREEN_WIDTH-boss_width; boss_direction = -1
-            boss_shoot_counter += 1
-            if boss_shoot_counter >= 45:
-                enemy_bullets.append([boss_x+boss_width//2, boss_y+boss_height, 0,                       enemy_bullet_speed])
-                enemy_bullets.append([boss_x+10,            boss_y+boss_height, -0.3*enemy_bullet_speed, enemy_bullet_speed])
-                enemy_bullets.append([boss_x+boss_width-10, boss_y+boss_height,  0.3*enemy_bullet_speed, enemy_bullet_speed])
-                boss_shoot_counter = 0
-
-            # ── 보스 수직 레이저 (AI기말branch.py, tier≥2) ───────────────
             boss_tier = current_wave // BOSS_WAVE_INTERVAL
+            boss_pattern = ((boss_tier - 1) % 4) + 1   # 1~4 순환
+
+            # 인트로 타이머
+            if boss_intro_timer > 0:
+                boss_intro_timer -= 1
+
+            # 공통: 좌우 이동
+            if boss_pattern != 4 or boss_charge_phase == 0:
+                boss_x += boss_speed * boss_direction
+                if boss_x <= 0:                         boss_x = 0;                       boss_direction = 1
+                elif boss_x >= SCREEN_WIDTH-boss_width: boss_x = SCREEN_WIDTH-boss_width; boss_direction = -1
+
+            boss_shoot_counter += 1
+
+            # ── Boss 1: VULTURE — 5발 스프레드 (40프레임) ────────────────
+            if boss_pattern == 1:
+                if boss_shoot_counter >= 40:
+                    boss_shoot_counter = 0
+                    bx0 = boss_x + boss_width // 2
+                    by0 = boss_y + boss_height
+                    for spread in (-0.5, -0.25, 0, 0.25, 0.5):
+                        enemy_bullets.append([bx0, by0, spread * enemy_bullet_speed, enemy_bullet_speed])
+
+            # ── Boss 2: INFERNO — 3-way + 호밍 미사일 ────────────────────
+            elif boss_pattern == 2:
+                phase2 = boss_hp < boss_max_hp * 0.5
+                fire_interval = 30 if phase2 else 50
+                if boss_shoot_counter >= fire_interval:
+                    boss_shoot_counter = 0
+                    bx0 = boss_x + boss_width // 2
+                    by0 = boss_y + boss_height
+                    enemy_bullets.append([bx0, by0, 0, enemy_bullet_speed])
+                    enemy_bullets.append([bx0, by0, -0.3*enemy_bullet_speed, enemy_bullet_speed])
+                    enemy_bullets.append([bx0, by0,  0.3*enemy_bullet_speed, enemy_bullet_speed])
+                # 호밍 미사일 (200프레임 주기)
+                if boss_anim_timer % 200 == 0:
+                    bx0 = boss_x + boss_width // 2
+                    by0 = boss_y + boss_height
+                    mspd = enemy_bullet_speed * 1.5
+                    ddx = (player_x + player_width //2) - bx0
+                    ddy = (player_y + player_height//2) - by0
+                    dlen = math.sqrt(ddx*ddx + ddy*ddy) or 1
+                    clown_balls.append([bx0, by0, ddx/dlen*mspd, ddy/dlen*mspd])
+
+            # ── Boss 3: SPECTER — 방사형 버스트 + 소환 ───────────────────
+            elif boss_pattern == 3:
+                phase2 = boss_hp < boss_max_hp * 0.5
+                if boss_shoot_counter >= 60:
+                    boss_shoot_counter = 0
+                    bx0 = boss_x + boss_width // 2
+                    by0 = boss_y + boss_height // 2
+                    n_bullets = 12 if phase2 else 8
+                    for i in range(n_bullets):
+                        angle = math.radians(360 / n_bullets * i)
+                        dx3 = math.cos(angle) * enemy_bullet_speed
+                        dy3 = math.sin(angle) * enemy_bullet_speed
+                        enemy_bullets.append([bx0, by0, dx3, dy3])
+                # 적 소환 (300프레임 주기)
+                if boss_anim_timer % 300 == 0 and boss_anim_timer > 0:
+                    for _ in range(2):
+                        ex3 = random.randint(0, SCREEN_WIDTH - enemy_width)
+                        etype3 = random.choice([0, 1])
+                        ehp3 = hp_multiplier(current_wave)
+                        enemies.append([ex3, -enemy_height, etype3, ehp3, ex3])
+
+            # ── Boss 4: TITAN — 듀얼 수직 레이저 + 돌진 ─────────────────
+            elif boss_pattern == 4:
+                phase2 = boss_hp < boss_max_hp * 0.5
+                if boss_shoot_counter >= 45:
+                    boss_shoot_counter = 0
+                    bx0 = boss_x + boss_width // 2
+                    by0 = boss_y + boss_height
+                    enemy_bullets.append([bx0, by0, 0, enemy_bullet_speed])
+                    enemy_bullets.append([bx0, by0, -0.3*enemy_bullet_speed, enemy_bullet_speed])
+                    enemy_bullets.append([bx0, by0,  0.3*enemy_bullet_speed, enemy_bullet_speed])
+                # 돌진 로직
+                charge_interval = 120 if phase2 else 180
+                if boss_charge_phase == 0:
+                    boss_charge_timer += 1
+                    if boss_charge_timer >= charge_interval:
+                        boss_charge_timer = 0
+                        boss_charge_phase = 1
+                elif boss_charge_phase == 1:
+                    boss_y += 6
+                    if boss_y >= SCREEN_HEIGHT // 2:
+                        boss_charge_phase = 2
+                elif boss_charge_phase == 2:
+                    boss_y -= 6
+                    if boss_y <= 50:
+                        boss_y = 50
+                        boss_charge_phase = 0
+
+            # ── 보스 수직 레이저 (Boss 4 or tier≥2 기존 로직) ────────────
+            laser_interval_eff = BOSS_LASER_INTERVAL // 2 if (boss_pattern == 4 and boss_hp < boss_max_hp * 0.5) else BOSS_LASER_INTERVAL
             if boss_tier >= 2:
                 if boss_laser_state == 0:
                     boss_laser_counter += 1
-                    if boss_laser_counter >= BOSS_LASER_INTERVAL:
+                    if boss_laser_counter >= laser_interval_eff:
                         boss_laser_counter        = 0
                         boss_laser_state          = 1
                         boss_laser_timer          = 0
@@ -1552,7 +1721,9 @@ while running:
         # 보스
         if boss_active:
             pulse_offset = int(3 * math.sin(boss_anim_timer * 0.1))
-            screen.blit(BOSS_SPRITE, (int(boss_x), boss_y + pulse_offset))
+            boss_tier_r = current_wave // BOSS_WAVE_INTERVAL
+            bspr = BOSS_SPRITES.get(((boss_tier_r - 1) % 4) + 1, BOSS_SPRITES[1])
+            screen.blit(bspr, (int(boss_x), boss_y + pulse_offset))
             pulse_a = int(40 + 40 * math.sin(boss_anim_timer * 0.15))
             draw_glow_circle(screen, (200, 80, 255),
                              (int(boss_x + boss_width//2), boss_y + boss_height//2 + pulse_offset),
