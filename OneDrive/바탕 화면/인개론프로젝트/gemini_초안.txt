@@ -1,0 +1,165 @@
+import pygame
+import random
+import sys
+
+# 1. 게임 초기화 및 창 설정
+pygame.init()
+SCREEN_WIDTH = 480
+SCREEN_HEIGHT = 640
+screen = pygame.display.set_set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Space Shooter Prototype")
+
+# 2. 색상 정의 (RGB)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+BLUE = (0, 128, 255)
+RED = (255, 50, 50)
+YELLOW = (255, 255, 0)
+
+# FPS 조절을 위한 시계 설정
+clock = pygame.time.Clock()
+FPS = 60
+
+# 3. 게임 객체 속성 설정
+# 플레이어 (파란색 네모)
+player_width = 40
+player_height = 40
+player_x = (SCREEN_WIDTH // 2) - (player_width // 2)
+player_y = SCREEN_HEIGHT - player_height - 20
+player_speed = 5
+
+# 미사일 리스트 (노란색 동그라미들을 저장)
+bullets = []
+bullet_speed = 7
+bullet_radius = 5
+
+# 적 비행기 리스트 (빨간색 네모들을 저장)
+enemies = []
+enemy_width = 40
+enemy_height = 40
+enemy_speed = 3
+enemy_spawn_counter = 0
+
+# 게임 상태 변수
+score = 0
+game_over = False
+
+# 폰트 설정
+font = pygame.font.SysFont("arial", 30)
+game_over_font = pygame.font.SysFont("arial", 50)
+
+# 4. 메인 게임 루프
+running = True
+while running:
+    # FPS 설정
+    clock.tick(FPS)
+
+    # --- 이벤트 처리 (키보드, 마우스 입력 등) ---
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        
+        # 키가 눌렸을 때
+        if event.type == pygame.KEYDOWN:
+            if game_over:
+                # 게임오버 상태에서 R 누르면 재시작
+                if event.key == pygame.K_r:
+                    player_x = (SCREEN_WIDTH // 2) - (player_width // 2)
+                    player_y = SCREEN_HEIGHT - player_height - 20
+                    bullets.clear()
+                    enemies.clear()
+                    score = 0
+                    game_over = False
+            else:
+                # 스페이스바를 누르면 미사일 발사 (플레이어 상단 중앙에서 발사)
+                if event.key == pygame.K_SPACE:
+                    bullet_x = player_x + (player_width // 2)
+                    bullet_y = player_y
+                    bullets.append([bullet_x, bullet_y])
+
+    # --- 게임 로직 업데이트 (게임오버가 아닐 때만 작동) ---
+    if not game_over:
+        # 플레이어 이동 조작 (연속 입력 처리)
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT] and player_x > 0:
+            player_x -= player_speed
+        if keys[pygame.K_RIGHT] and player_x < SCREEN_WIDTH - player_width:
+            player_x += player_speed
+        if keys[pygame.K_UP] and player_y > 0:
+            player_y -= player_speed
+        if keys[pygame.K_DOWN] and player_y < SCREEN_HEIGHT - player_height:
+            player_y += player_speed
+
+        # 미사일 위치 업데이트
+        for bullet in bullets[:]:
+            bullet[1] -= bullet_speed  # 위로 이동
+            if bullet[1] < 0:          # 화면 밖으로 나가면 삭제
+                bullets.remove(bullet)
+
+        # 적 생성 주기 관리 (약 0.5초마다 하나씩 생성)
+        enemy_spawn_counter += 1
+        if enemy_spawn_counter >= 30:
+            enemy_x = random.randint(0, SCREEN_WIDTH - enemy_width)
+            enemy_y = -enemy_height
+            enemies.append([enemy_x, enemy_y])
+            enemy_spawn_counter = 0
+
+        # 적 위치 업데이트
+        for enemy in enemies[:]:
+            enemy[1] += enemy_speed  # 아래로 이동
+            if enemy[1] > SCREEN_HEIGHT:  # 화면 바닥에 닿으면 삭제 (놓치면 점수 감점 등 변형 가능)
+                enemies.remove(enemy)
+
+        # 충돌 검사 1: 미사일과 적의 충돌
+        for bullet in bullets[:]:
+            bullet_rect = pygame.Rect(bullet[0] - bullet_radius, bullet[1] - bullet_radius, bullet_radius * 2, bullet_radius * 2)
+            for enemy in enemies[:]:
+                enemy_rect = pygame.Rect(enemy[0], enemy[1], enemy_width, enemy_height)
+                
+                if bullet_rect.colliderect(enemy_rect):
+                    if bullet in bullets:
+                        bullets.remove(bullet)
+                    if enemy in enemies:
+                        enemies.remove(enemy)
+                    score += 10  # 적 격추 시 10점 획득
+
+        # 충돌 검사 2: 플레이어와 적의 충돌 (게임 오버 조건)
+        player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
+        for enemy in enemies:
+            enemy_rect = pygame.Rect(enemy[0], enemy[1], enemy_width, enemy_height)
+            if player_rect.colliderect(enemy_rect):
+                game_over = True
+
+    # --- 화면 그리기 (렌더링) ---
+    screen.fill(BLACK)  # 배경은 검은색
+
+    # 플레이어 그리기 (파란색 사각형)
+    pygame.draw.rect(screen, BLUE, (player_x, player_y, player_width, player_height))
+
+    # 미사일 그리기 (노란색 원)
+    for bullet in bullets:
+        pygame.draw.circle(screen, YELLOW, (bullet[0], bullet[1]), bullet_radius)
+
+    # 적 그리기 (빨간색 사각형)
+    for enemy in enemies:
+        pygame.draw.rect(screen, RED, (enemy[0], enemy[1], enemy_width, enemy_height))
+
+    # 점수 표시
+    score_text = font.render(f"Score: {score}", True, WHITE)
+    screen.blit(score_text, (10, 10))
+
+    # 게임 오버 화면 그리기
+    if game_over:
+        over_text = game_over_font.render("GAME OVER", True, WHITE)
+        restart_text = font.render("Press 'R' to Restart", True, WHITE)
+        
+        # 화면 중앙 정렬 계산
+        screen.blit(over_text, (SCREEN_WIDTH // 2 - over_text.get_width() // 2, SCREEN_HEIGHT // 2 - 50))
+        screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, SCREEN_HEIGHT // 2 + 20))
+
+    # 화면 업데이트
+    pygame.display.flip()
+
+# 게임 종료 처리
+pygame.quit()
+sys.exit()
