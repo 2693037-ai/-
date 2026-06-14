@@ -121,12 +121,16 @@ def make_thruster_flame(frame):
 def make_enemy_sprite(etype, w=40, h=40):
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
     if etype == 0:
-        body = [(w//2, 6), (w-4, h-6), (4, h-6)]
-        pygame.draw.polygon(surf, (180, 30, 30), body)
-        pygame.draw.polygon(surf, (255, 80, 80), body, 2)
-        pygame.draw.ellipse(surf, (255, 160, 160), (w//2-5, h//2-4, 10, 10))
-        pygame.draw.rect(surf, (220, 60, 60), (w//2-8, h-8, 16, 6))
-        pygame.draw.line(surf, (255, 100, 100), (w//2, 6), (w//2, h-6), 1)
+        # 황토색 찌그러진 삼각형 동체 (작고 볼품없음)
+        body = [(w//2+2, 10), (w-8, h-5), (6, h-5)]
+        pygame.draw.polygon(surf, (160, 120, 40), body)
+        pygame.draw.polygon(surf, (190, 150, 60), body, 1)
+        # 긁힌 듯한 균열선
+        pygame.draw.line(surf, (100, 75, 20), (w//2, 14), (w//2-3, h-8), 1)
+        pygame.draw.line(surf, (100, 75, 20), (w//2+3, 18), (w//2+5, h-9), 1)
+        # 엔진 흔적 (작고 희미한 사각형 2개)
+        pygame.draw.rect(surf, (120, 90, 25), (w//2-7, h-7, 5, 4))
+        pygame.draw.rect(surf, (120, 90, 25), (w//2+2, h-7, 5, 4))
     elif etype == 1:
         pygame.draw.circle(surf, (180, 80, 20), (w//2, h//2), w//2-3)
         pygame.draw.circle(surf, (255, 130, 40), (w//2, h//2), w//2-3, 2)
