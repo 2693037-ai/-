@@ -1070,6 +1070,11 @@ while running:
             if game_over and event.key == pygame.K_r:
                 reset_game()
                 game_over_tick = 0
+            if not game_over and event.key == pygame.K_n and wave_state in ('playing', 'boss'):
+                enemies.clear()
+                clown_balls.clear()
+                wave_kills = wave_kill_goal
+                wave_state = 'wave_clear'
             # 증강 선택 키보드 단축키 (AI기말branch.py)
             if wave_state == 'augment':
                 if event.key == pygame.K_1 and len(augment_choices) > 0:
