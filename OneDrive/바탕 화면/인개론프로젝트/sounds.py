@@ -226,22 +226,31 @@ def _make_laser_warning():
 
 
 def _make_laser_fire():
-    """레이저 발사 – 강렬한 고주파 빔음."""
-    dur = 0.6
+    """레이저 발사 – 지잉~ 하는 고주파 지속 빔음."""
+    dur = 0.75
     def func(t):
         n = len(t)
-        # 메인 빔: 800Hz 사인 + 고조파
-        beam = (_sine(t, 800) * 0.4
-                + _sine(t, 1600) * 0.2
-                + _sine(t, 400) * 0.3)
-        # 노이즈 레이어로 거친 느낌
-        crackle = _noise(n) * 0.25
-        sig = beam + crackle
-        # 처음 순간 피크 후 빠르게 감쇠
-        env = np.exp(-t / 0.18) * 0.7 + np.exp(-t / 0.55) * 0.3
+        # 발사 순간 800Hz→300Hz 로 빠르게 내려오는 피치 스윕 (지잉 느낌)
+        freq_sweep = 800 * np.exp(-t / 0.12) + 300
+        sweep = _sine(t, freq_sweep) * 0.55
+
+        # 지속되는 윙윙 레이어: 260Hz 사인 + 520Hz 배음 (두께감)
+        hum = (_sine(t, 260) * 0.30 + _sine(t, 520) * 0.15)
+
+        # 고주파 지잉 레이어: 2.4kHz 얇은 사인 (날카로운 지잉)
+        zing = _sine(t, 2400) * 0.12
+
+        # 아주 약한 노이즈로 질감만 살짝
+        texture = _noise(n) * 0.06
+
+        sig = sweep + hum + zing + texture
+
+        # 앞부분 날카롭게 치고 → 중간까지 지속 → 천천히 감쇠
+        env = (np.exp(-t / 0.04) * 0.5          # 초기 임팩트
+               + np.exp(-t / 0.55) * 0.5)        # 지속 울림
         return sig * env
     snd = _make_array(dur, func)
-    snd.set_volume(0.65)
+    snd.set_volume(0.60)
     return snd
 
 
