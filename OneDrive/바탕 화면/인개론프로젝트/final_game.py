@@ -1361,7 +1361,7 @@ while running:
                         if enemy in enemies: enemies.remove(enemy)
                         cx2 = enemy[0] + ew//2
                         cy2 = enemy[1] + eh//2
-                        ec  = {0:RED,1:ORANGE,2:YELLOW,3:CYAN,4:LIME,5:LIME_DARK,6:HOT_PINK}
+                        ec  = {0:(160,120,40),1:ORANGE,2:YELLOW,3:CYAN,4:LIME,5:LIME_DARK,6:HOT_PINK}
                         spawn_explosion(cx2, cy2, ec.get(enemy[2], RED), 20)
                         sounds['explode'].play()
                         if enemy[2] == 4:
