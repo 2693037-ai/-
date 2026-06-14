@@ -159,33 +159,29 @@ def make_enemy_sprite(etype, w=40, h=40):
         pygame.draw.polygon(surf, (60, 150, 20), pts)
         pygame.draw.polygon(surf, (140, 255, 60), pts, 1)
     elif etype == 6:
-        # 머리카락 폼폼 (3색)
-        for hx, hc in [(9,(255,60,60)),(20,(255,215,0)),(31,(80,140,255))]:
-            pygame.draw.circle(surf, hc, (hx, 6), 6)
-        # 흰 얼굴 타원
-        pygame.draw.ellipse(surf, (255, 255, 255), (4, 9, 32, 24))
-        pygame.draw.ellipse(surf, (210, 200, 210), (4, 9, 32, 24), 1)
-        # 파란 눈 패치
-        pygame.draw.ellipse(surf, (100, 170, 255), (5, 13, 11, 7))
-        pygame.draw.ellipse(surf, (100, 170, 255), (24, 13, 11, 7))
-        # 동공
-        pygame.draw.circle(surf, (0, 0, 0), (11, 17), 2)
-        pygame.draw.circle(surf, (0, 0, 0), (29, 17), 2)
-        # 빨간 코
-        pygame.draw.circle(surf, (255, 30, 30), (20, 22), 4)
-        pygame.draw.circle(surf, (255, 120, 120), (19, 21), 1)
-        # 웃음
-        pygame.draw.arc(surf, (200, 50, 50),
-                        pygame.Rect(10, 19, 20, 11), math.pi, 2*math.pi, 2)
-        # 팔 (저글링 자세)
-        pygame.draw.line(surf, (255, 210, 160), (5, 24), (0, 32), 2)
-        pygame.draw.line(surf, (255, 210, 160), (35, 24), (40, 32), 2)
-        # 손의 저글링 공 (핑크/노랑)
-        pygame.draw.circle(surf, HOT_PINK, (1, 33), 4)
-        pygame.draw.circle(surf, YELLOW,   (39, 33), 4)
-        # 칼라 (보라)
-        pygame.draw.polygon(surf, (200, 60, 200),
-                            [(12,33),(20,39),(28,33),(24,36),(16,36)])
+        # ── 빨간 전투기 (미니보스) ──────────────────────────────────────
+        # 동체
+        body = [(w//2,2),(w-5,h*2//3),(w//2+7,h-3),(w//2,h-8),(w//2-7,h-3),(5,h*2//3)]
+        pygame.draw.polygon(surf, (180, 15, 15), body)
+        pygame.draw.polygon(surf, (255, 60, 60), body, 2)
+        # 좌우 날개
+        pygame.draw.polygon(surf, (130, 8, 8),
+                            [(5,h*2//3),(0,h-3),(w//2-5,h//2)])
+        pygame.draw.polygon(surf, (130, 8, 8),
+                            [(w-5,h*2//3),(w,h-3),(w//2+5,h//2)])
+        # 날개 테두리
+        pygame.draw.polygon(surf, (220, 50, 50),
+                            [(5,h*2//3),(0,h-3),(w//2-5,h//2)], 1)
+        pygame.draw.polygon(surf, (220, 50, 50),
+                            [(w-5,h*2//3),(w,h-3),(w//2+5,h//2)], 1)
+        # 캐노피
+        pygame.draw.ellipse(surf, (255, 110, 110), (w//2-5, h//8, 10, 14))
+        pygame.draw.ellipse(surf, (255, 210, 210), (w//2-3, h//8+2, 5, 6))
+        # 엔진 노즐
+        pygame.draw.rect(surf, (90, 5, 5),    (w//2-4, h-7, 8, 7))
+        pygame.draw.rect(surf, (255, 80, 0),  (w//2-2, h-5, 4, 5))
+        # 중심선
+        pygame.draw.line(surf, (255, 80, 80), (w//2, 4), (w//2, h-9), 1)
     return surf
 
 def make_boss_sprite(w=80, h=48):
@@ -236,14 +232,19 @@ def make_enemy_bullet_surface(radius):
     pygame.draw.circle(surf, (255, 200, 80), (cx, cy), radius)
     return surf
 
-def make_clown_ball_surface(radius=8):
-    sz = (radius + 8) * 2
-    surf = pygame.Surface((sz, sz), pygame.SRCALPHA)
-    cx, cy = sz // 2, sz // 2
-    pygame.draw.circle(surf, (255, 80, 180, 50),  (cx, cy), radius + 7)
-    pygame.draw.circle(surf, (255, 120, 210, 100), (cx, cy), radius + 4)
-    pygame.draw.circle(surf, (255, 100, 200),      (cx, cy), radius)
-    pygame.draw.circle(surf, (255, 220, 240),      (cx-3, cy-3), 3)
+def make_missile_surface():
+    """유도 미사일 – 위쪽(음의 y)이 탄두 방향인 기저 서피스."""
+    w, h = 8, 22
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    # 탄두 (삼각형, 위쪽)
+    pygame.draw.polygon(surf, (255, 90, 90), [(w//2, 0), (1, 6), (w-1, 6)])
+    # 동체
+    pygame.draw.rect(surf, (200, 30, 30), (2, 5, 4, 13))
+    # 동체 하이라이트
+    pygame.draw.line(surf, (255, 150, 150), (w//2, 2), (w//2, h-8), 1)
+    # 꼬리 날개 (fin)
+    pygame.draw.polygon(surf, (150, 10, 10), [(0, h-1), (3, h-8), (3, h)])
+    pygame.draw.polygon(surf, (150, 10, 10), [(w, h-1), (w-3, h-8), (w-3, h)])
     return surf
 
 # ── 폰트 ──────────────────────────────────────────────────────────────────
@@ -277,8 +278,8 @@ def get_bullet_surf(radius):
     return _bullet_surf_cache[radius]
 
 ENEMY_BULLET_SURF  = make_enemy_bullet_surface(4)
-CLOWN_BALL_RADIUS  = enemy_bullet_radius * 2   # = 8
-CLOWN_BALL_SURF    = make_clown_ball_surface(CLOWN_BALL_RADIUS)
+MISSILE_RADIUS = 6
+MISSILE_SURF   = make_missile_surface()
 THRUSTER_FRAMES = [make_thruster_flame(i) for i in range(8)]
 thruster_frame = 0
 
@@ -322,9 +323,10 @@ item_speed  = 4
 # ── 파티클 ────────────────────────────────────────────────────────────────
 particles = []
 
-# ── 삐에로 공 / 숫자 이펙트 ───────────────────────────────────────────────
-clown_balls     = []   # [x, y, dx, dy, bounce_count]
-number_effects  = []   # {'num':'6'|'7', 'life':int, 'max_life':int}
+# ── 미사일 / 스폰 링 이펙트 ──────────────────────────────────────────────
+clown_balls    = []   # 유도 미사일: [x, y, dx, dy]
+number_effects = []   # (미사용, 호환성 유지)
+spawn_rings    = []   # 미니보스 등장 링: {x, y, max_r, life, max_life}
 
 # ── 보스 ──────────────────────────────────────────────────────────────────
 boss_active       = False
@@ -588,14 +590,13 @@ def get_wave_enemy_table(wave):
     elif wave == 2:
         return [(0,1,60),(3,1,40)]
     elif wave == 3:
-        return [(0,1,35),(1,1,30),(3,1,25),(6,4,10)]
+        return [(0,1,40),(1,1,30),(3,1,30)]
     elif wave == 4:
-        return [(0,1,22),(1,1,22),(3,1,22),(4,2,22),(6,4,12)]
+        return [(0,1,25),(1,1,25),(3,1,25),(4,2,25)]
     else:
         w = min(wave, 10)
         extra = min(w - 4, 6) * 2
-        clown_w = min(10 + (w-4)*2, 18)
-        return [(0,1,max(5,12-extra)),(1,1,18),(3,1,18),(4,2,22+extra//2),(2,3,18+extra//2),(6,4,clown_w)]
+        return [(0,1,max(5,15-extra)),(1,1,20),(3,1,20),(4,2,25+extra//2),(2,3,20+extra//2)]
 
 def hp_multiplier(wave):
     """웨이브에 따른 적 HP 배율. 5웨이브마다 1씩 증가 (AI기말branch.py)."""
@@ -611,10 +612,7 @@ def spawn_wave_enemy(wave):
     ehp = ehp * hp_multiplier(wave)   # AI기말branch.py: 웨이브 배율 적용
     ex = random.randint(0, SCREEN_WIDTH - enemy_width)
     ey = -enemy_height
-    if etype == 6:
-        enemies.append([ex, ey, etype, ehp, ex, random.randint(0, 150)])
-    else:
-        enemies.append([ex, ey, etype, ehp, ex])
+    enemies.append([ex, ey, etype, ehp, ex])
 
 def start_wave(wave_num):
     global current_wave, wave_kills, wave_enemy_spawned
@@ -635,7 +633,7 @@ def start_wave(wave_num):
     enemy_bullets.clear()
     items.clear()
     clown_balls.clear()
-    number_effects.clear()
+    spawn_rings.clear()
 
     if wave_num % BOSS_WAVE_INTERVAL == 0:
         wave_state         = 'boss'
@@ -655,6 +653,19 @@ def start_wave(wave_num):
         wave_kill_goal      = 15 + wave_num * 5
         wave_spawn_total    = wave_kill_goal + 15
         wave_spawn_interval = max(15, 30 - wave_num)
+
+        # ── 보스 직전 웨이브: n번째 보스 앞 n대 미니보스 전투기 출현 ─────
+        if wave_num % BOSS_WAVE_INTERVAL == BOSS_WAVE_INTERVAL - 1:
+            n_jets = wave_num // BOSS_WAVE_INTERVAL + 1
+            for j in range(n_jets):
+                spacing = SCREEN_WIDTH // (n_jets + 1)
+                jx = float(spacing * (j + 1) - enemy_width // 2)
+                jy = 68.0
+                phase = j * (2 * math.pi / max(n_jets, 1))
+                ehp_j = 6 * hp_multiplier(wave_num)
+                enemies.append([jx, jy, 6, ehp_j, phase, random.randint(60, 240)])
+                spawn_rings.append({'x': jx + enemy_width//2, 'y': jy + enemy_height//2,
+                                    'max_r': 60, 'life': 50, 'max_life': 50})
 
     laser_state               = 0
     laser_state_timer         = 0
@@ -700,7 +711,7 @@ def reset_game():
     particles.clear()
     popups.clear()
     clown_balls.clear()
-    number_effects.clear()
+    spawn_rings.clear()
     _bullet_surf_cache.clear()
 
     _go_sound_played        = False
@@ -1203,41 +1214,40 @@ while running:
             eb[0] += eb[2]; eb[1] += eb[3]
             if eb[1] > SCREEN_HEIGHT or eb[0] < 0 or eb[0] > SCREEN_WIDTH: enemy_bullets.remove(eb)
 
-        # ── 삐에로 공 이동 및 튕김 ──────────────────────────────────────
-        CBR = CLOWN_BALL_RADIUS
-        for ball in clown_balls[:]:
-            ball[0] += ball[2]; ball[1] += ball[3]
-            bounced = False
-            if ball[0] - CBR <= 0:
-                ball[0] = CBR; ball[2] = abs(ball[2]); bounced = True
-            elif ball[0] + CBR >= SCREEN_WIDTH:
-                ball[0] = SCREEN_WIDTH - CBR; ball[2] = -abs(ball[2]); bounced = True
-            if ball[1] - CBR <= 0:
-                ball[1] = CBR; ball[3] = abs(ball[3])
-                if not bounced: bounced = True
-            elif ball[1] + CBR >= SCREEN_HEIGHT:
-                ball[1] = SCREEN_HEIGHT - CBR; ball[3] = -abs(ball[3])
-                if not bounced: bounced = True
-            if bounced:
-                ball[4] += 1
-                sounds['clown_bounce'].play()
-                if ball[4] == 6:
-                    number_effects.append({'num': '6', 'life': 90, 'max_life': 90})
-                elif ball[4] >= 7:
-                    number_effects.append({'num': '7', 'life': 90, 'max_life': 90})
-                    for i in range(12):
-                        a = math.radians(i * 30)
-                        enemy_bullets.append([ball[0], ball[1],
-                                              enemy_bullet_speed * math.sin(a),
-                                              enemy_bullet_speed * math.cos(a)])
-                    spawn_explosion(int(ball[0]), int(ball[1]), HOT_PINK, 30)
-                    sounds['explode'].play()
-                    if ball in clown_balls: clown_balls.remove(ball)
+        # ── 유도 미사일 이동 + 매연 ──────────────────────────────────────
+        TURN_RATE = 0.04
+        tx = player_x + player_width  // 2
+        ty = player_y + player_height // 2
+        for missile in clown_balls[:]:
+            dpx = tx - missile[0]; dpy = ty - missile[1]
+            dist_p = math.sqrt(dpx*dpx + dpy*dpy)
+            if dist_p > 0:
+                nx, ny = dpx/dist_p, dpy/dist_p
+                spd = math.sqrt(missile[2]**2 + missile[3]**2)
+                missile[2] += nx * TURN_RATE * spd
+                missile[3] += ny * TURN_RATE * spd
+                new_spd = math.sqrt(missile[2]**2 + missile[3]**2)
+                if new_spd > 0:
+                    missile[2] = missile[2] / new_spd * spd
+                    missile[3] = missile[3] / new_spd * spd
+            missile[0] += missile[2]; missile[1] += missile[3]
+            spd2 = math.sqrt(missile[2]**2 + missile[3]**2)
+            if spd2 > 0:
+                ex2 = missile[0] - missile[2]/spd2 * 9
+                ey2 = missile[1] - missile[3]/spd2 * 9
+                ecol = random.choice([(255,120,0),(255,200,50),(210,210,210)])
+                particles.append({'x':ex2+random.uniform(-2,2),'y':ey2+random.uniform(-2,2),
+                                   'dx':-missile[2]/spd2*0.6+random.uniform(-0.6,0.6),
+                                   'dy':-missile[3]/spd2*0.6+random.uniform(-0.6,0.6),
+                                   'life':10,'max_life':10,'color':ecol,'size':random.uniform(1.5,3.0)})
+            if (missile[0] < -30 or missile[0] > SCREEN_WIDTH+30 or
+                    missile[1] < -30 or missile[1] > SCREEN_HEIGHT+30):
+                if missile in clown_balls: clown_balls.remove(missile)
 
-        # ── 숫자 이펙트 타이머 ───────────────────────────────────────────
-        for eff in number_effects[:]:
-            eff['life'] -= 1
-            if eff['life'] <= 0: number_effects.remove(eff)
+        # ── 스폰 링 이펙트 업데이트 ──────────────────────────────────────
+        for ring in spawn_rings[:]:
+            ring['life'] -= 1
+            if ring['life'] <= 0: spawn_rings.remove(ring)
 
         # ── 보스 웨이브 ──────────────────────────────────────────────────
         if wave_state == 'boss' and boss_active:
@@ -1305,19 +1315,25 @@ while running:
             elif enemy[2] == 3: spd = 5
             elif enemy[2] == 4: spd = 2
             elif enemy[2] == 6:
-                enemy[1] += enemy_speed / 6
+                # 사인파 수평 이동 (상단 고정)
+                enemy[4] += 0.022   # phase (index 4 재활용)
+                amplitude = (SCREEN_WIDTH // 2 - enemy_width - 12)
+                enemy[0] = SCREEN_WIDTH // 2 + math.sin(enemy[4]) * amplitude
+                enemy[0] = max(0.0, min(enemy[0], float(SCREEN_WIDTH - enemy_width)))
+                enemy[1] = 68.0
+                # 발사 카운터 (index 5)
                 enemy[5] += 1
                 if enemy[5] >= 300:
                     enemy[5] = 0
-                    cx6 = int(enemy[0] + enemy_width // 2)
-                    cy6 = int(enemy[1] + enemy_height // 2)
-                    cspd = enemy_bullet_speed * 2
-                    side = random.choice([-1, 1])
-                    bdx = side * cspd * math.sin(math.radians(30))
-                    bdy = cspd * math.cos(math.radians(30))
-                    clown_balls.append([float(cx6), float(cy6), bdx, bdy, 0])
-                if enemy[1] > SCREEN_HEIGHT:
-                    if enemy in enemies: enemies.remove(enemy)
+                    cx6 = enemy[0] + enemy_width  // 2
+                    cy6 = enemy[1] + enemy_height // 2
+                    mspd = enemy_bullet_speed * 1.5
+                    # 초기 방향: 플레이어 쪽
+                    ddx = (player_x + player_width //2) - cx6
+                    ddy = (player_y + player_height//2) - cy6
+                    dlen = math.sqrt(ddx*ddx + ddy*ddy) or 1
+                    clown_balls.append([cx6, cy6,
+                                        ddx/dlen*mspd, ddy/dlen*mspd])
                 continue
             elif enemy[2] == 5:
                 enemy[0] += enemy[5]; enemy[1] += enemy[6]
@@ -1432,7 +1448,8 @@ while running:
                             sounds['game_over'].play()
 
             for ball in clown_balls[:]:
-                br2 = pygame.Rect(int(ball[0])-CBR, int(ball[1])-CBR, CBR*2, CBR*2)
+                mr = MISSILE_RADIUS
+                br2 = pygame.Rect(int(ball[0])-mr, int(ball[1])-mr, mr*2, mr*2)
                 if pr.colliderect(br2):
                     if ball in clown_balls: clown_balls.remove(ball)
                     player_hp -= 1
@@ -1484,7 +1501,7 @@ while running:
             wave_state       = 'wave_clear'
             wave_clear_timer = 0
             enemies.clear(); enemy_bullets.clear(); bullets.clear()
-            clown_balls.clear()
+            clown_balls.clear(); spawn_rings.clear()
             sounds['bgm'].set_volume(0.08)
             sounds['wave_clear'].play()
             _bgm_duck_timer = 90
@@ -1545,7 +1562,7 @@ while running:
             spr = ENEMY_SPRITES.get(etype)
             if spr:
                 screen.blit(spr, (ex, ey))
-            max_hp_map = {0:1,1:1,2:3,3:1,4:2,5:1,6:4}
+            max_hp_map = {0:1,1:1,2:3,3:1,4:2,5:1,6:6}
             ehp_max = max_hp_map.get(etype, 1) * hp_multiplier(current_wave)
             if enemy[3] < ehp_max or ehp_max > 1:
                 draw_hp_bar(screen, ex, ey - 8, ew, enemy[3], ehp_max)
@@ -1595,11 +1612,24 @@ while running:
                 pygame.draw.circle(ps, col + (a,), (r, r), r)
                 screen.blit(ps, (int(p['x'])-r, int(p['y'])-r))
 
-        # 삐에로 공
-        for ball in clown_balls:
-            screen.blit(CLOWN_BALL_SURF,
-                        (int(ball[0]) - CLOWN_BALL_SURF.get_width()//2,
-                         int(ball[1]) - CLOWN_BALL_SURF.get_height()//2))
+        # 미니보스 등장 링 이펙트
+        for ring in spawn_rings:
+            ratio = ring['life'] / ring['max_life']  # 1→0
+            r = int(ring['max_r'] * (1 - ratio))
+            alpha = int(35 * ratio)
+            if r > 1 and alpha > 0:
+                rs = pygame.Surface((r*2+4, r*2+4), pygame.SRCALPHA)
+                pygame.draw.circle(rs, (255,255,255,alpha), (r+2,r+2), r, 2)
+                screen.blit(rs, (int(ring['x'])-r-2, int(ring['y'])-r-2))
+
+        # 유도 미사일 (방향에 따라 회전)
+        for missile in clown_balls:
+            spd_m = math.sqrt(missile[2]**2 + missile[3]**2)
+            if spd_m > 0:
+                ang = -math.degrees(math.atan2(missile[2], -missile[3]))
+                rot_surf = pygame.transform.rotate(MISSILE_SURF, ang)
+                screen.blit(rot_surf, (int(missile[0]) - rot_surf.get_width()//2,
+                                       int(missile[1]) - rot_surf.get_height()//2))
 
         # 아이템
         for item in items:
