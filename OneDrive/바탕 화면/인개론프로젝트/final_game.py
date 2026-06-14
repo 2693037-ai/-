@@ -28,9 +28,11 @@ DARK_GRAY= (30,  30,  40)
 GOLD     = (255, 215, 0)
 
 # ── 추가 팔레트 (space_shooter.py) ───────────────────────────────────────
-DEEP_SPACE    = (6,   8,  20)
-NEBULA_BLUE   = (10,  20, 50)
-NEBULA_PURPLE = (25,  10, 45)
+DEEP_SPACE    = (4,   3,  12)
+NEBULA_BLUE   = (18,  35, 90)
+NEBULA_PURPLE = (70,  10, 55)
+NEBULA_RED    = (110, 12, 25)
+NEBULA_PINK   = (140, 30, 70)
 PLAYER_CORE   = (80, 180, 255)
 PLAYER_BODY   = (30,  90, 180)
 PLAYER_ENGINE = (0,  220, 255)
@@ -446,28 +448,81 @@ popups = []
 
 # ── 배경 시스템 (space_shooter.py) ───────────────────────────────────────
 stars = []
-for _ in range(80):
-    layer = random.choices([0, 1, 2], weights=[50, 30, 20])[0]
-    sz    = [1, 1, 2][layer]
-    spd   = [0.2, 0.5, 1.0][layer]
-    base  = random.randint(30, 60) + layer * 30
-    col   = (base, base, min(255, base + random.randint(0, 30)))
-    stars.append([random.randint(0, SCREEN_WIDTH), random.randint(0, SCREEN_HEIGHT), sz, spd, col, layer])
+for _ in range(130):
+    layer = random.choices([0, 1, 2, 3], weights=[40, 30, 20, 10])[0]
+    sz    = [1, 1, 2, 3][layer]
+    spd   = [0.15, 0.4, 0.8, 1.4][layer]
+    # 별 색상: 청백(뜨거운 별), 황백(태양형), 주황(차가운 별), 순백(밝은 항성)
+    col_type = random.choices([0, 1, 2, 3], weights=[40, 25, 20, 15])[0]
+    if col_type == 0:   base_col = (180, 200, 255)   # 청백
+    elif col_type == 1: base_col = (255, 240, 200)   # 황백
+    elif col_type == 2: base_col = (255, 180, 120)   # 주황
+    else:               base_col = (255, 255, 255)   # 순백
+    # 밝기 변조용 위상값 추가
+    phase = random.uniform(0, math.pi * 2)
+    stars.append([random.randint(0, SCREEN_WIDTH), random.randint(0, SCREEN_HEIGHT),
+                  sz, spd, base_col, layer, phase])
+
+# 고정 밝은 항성 (십자 광망용)
+bright_stars = []
+for _ in range(6):
+    col_type = random.choice([(200, 220, 255), (255, 245, 210), (255, 255, 255)])
+    bright_stars.append([random.randint(20, SCREEN_WIDTH-20),
+                         random.randint(80, SCREEN_HEIGHT-40),
+                         col_type, random.uniform(0, math.pi*2)])
 
 def make_nebula():
     s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT * 2), pygame.SRCALPHA)
-    for _ in range(6):
-        cx = random.randint(40, SCREEN_WIDTH - 40)
-        cy = random.randint(40, SCREEN_HEIGHT * 2 - 40)
-        rx = random.randint(60, 160)
-        ry = random.randint(40, 120)
-        for scale in range(5, 0, -1):
-            alpha = random.randint(4, 12)
-            base_col = random.choice([NEBULA_BLUE, NEBULA_PURPLE, (15, 5, 35)])
-            nebula_s = pygame.Surface((rx * scale // 2 * 2, ry * scale // 2 * 2), pygame.SRCALPHA)
-            pygame.draw.ellipse(nebula_s, base_col + (alpha,),
-                                (0, 0, rx * scale // 2 * 2, ry * scale // 2 * 2))
-            s.blit(nebula_s, (cx - rx * scale // 4, cy - ry * scale // 4))
+
+    # ── 대형 배경 성운 구름 (붉은/분홍) ──────────────────────────────────
+    nebula_regions = [
+        # (cx, cy, rx, ry, color_choices, layers, alpha_range)
+        (200, 280, 210, 130, [NEBULA_RED, NEBULA_PINK, (90, 8, 30)],   7, (10, 22)),
+        (80,  500, 170, 100, [NEBULA_PINK, (120, 20, 50), NEBULA_RED], 6, (8,  18)),
+        (360, 160, 150, 90,  [NEBULA_PURPLE, NEBULA_PINK, (80, 5, 45)],6, (8,  18)),
+        (280, 750, 180, 110, [NEBULA_RED, NEBULA_PURPLE, (60, 10, 40)],6, (9,  20)),
+        (120, 1000,160, 95,  [NEBULA_PINK, NEBULA_BLUE, (100, 15, 60)],5, (7,  16)),
+        (400, 900, 140, 85,  [NEBULA_PURPLE, NEBULA_RED, (50, 8, 38)], 5, (8,  17)),
+        # 청색 성운 포인트
+        (50,  200, 100, 70,  [NEBULA_BLUE, (20, 50, 120), (10, 40, 100)], 5, (6, 14)),
+        (430, 600, 110, 75,  [NEBULA_BLUE, (15, 45, 110)],               4, (5, 12)),
+    ]
+    for (cx, cy, rx, ry, colors, layers, ar) in nebula_regions:
+        for scale in range(layers, 0, -1):
+            alpha = random.randint(ar[0], ar[1])
+            col   = random.choice(colors)
+            w2, h2 = max(2, rx * scale // layers * 2), max(2, ry * scale // layers * 2)
+            ns = pygame.Surface((w2, h2), pygame.SRCALPHA)
+            pygame.draw.ellipse(ns, col + (alpha,), (0, 0, w2, h2))
+            s.blit(ns, (cx - w2 // 2, cy - h2 // 2))
+
+    # ── 성운 내부 밝은 코어 (항성 형성 영역) ─────────────────────────────
+    cores = [
+        (200, 260, 55, 38, (200, 80, 100)),
+        (85,  490, 45, 32, (180, 70,  90)),
+        (365, 150, 40, 28, (130, 80, 200)),
+        (285, 740, 48, 34, (190, 60,  80)),
+    ]
+    for (cx, cy, rx, ry, col) in cores:
+        for scale in range(4, 0, -1):
+            alpha = random.randint(12, 28) * scale // 4
+            w2, h2 = max(2, rx * scale // 2), max(2, ry * scale // 2)
+            ns = pygame.Surface((w2, h2), pygame.SRCALPHA)
+            pygame.draw.ellipse(ns, col + (alpha,), (0, 0, w2, h2))
+            s.blit(ns, (cx - w2 // 2, cy - h2 // 2))
+
+    # ── 성운 내 밝은 필라멘트(섬유 구조) ────────────────────────────────
+    for _ in range(18):
+        x1 = random.randint(10, SCREEN_WIDTH - 10)
+        y1 = random.randint(10, SCREEN_HEIGHT * 2 - 10)
+        length = random.randint(40, 140)
+        angle  = random.uniform(0, math.pi * 2)
+        x2 = int(x1 + math.cos(angle) * length)
+        y2 = int(y1 + math.sin(angle) * length)
+        col = random.choice([(160, 40, 60, 18), (140, 30, 80, 15),
+                              (80, 30, 160, 12), (180, 60, 90, 14)])
+        pygame.draw.line(s, col, (x1, y1), (x2, y2), random.randint(1, 3))
+
     return s
 
 _nebula_surf   = make_nebula()
@@ -476,10 +531,18 @@ _nebula_y_offset = 0.0
 def _make_bg_base():
     s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
     for y in range(SCREEN_HEIGHT):
-        ratio = y / SCREEN_HEIGHT
-        r = int(DEEP_SPACE[0] + (NEBULA_BLUE[0] - DEEP_SPACE[0]) * ratio * 0.3)
-        g = int(DEEP_SPACE[1] + (NEBULA_BLUE[1] - DEEP_SPACE[1]) * ratio * 0.3)
-        b = int(DEEP_SPACE[2] + (NEBULA_BLUE[2] - DEEP_SPACE[2]) * ratio * 0.5)
+        t = y / SCREEN_HEIGHT
+        # 상단: 깊은 우주 암흑 → 중간: 짙은 붉은 성운 → 하단: 자주/청보라
+        if t < 0.45:
+            u = t / 0.45
+            r = int(4  + 80  * u)
+            g = int(3  + 8   * u)
+            b = int(12 + 28  * u)
+        else:
+            u = (t - 0.45) / 0.55
+            r = int(84 - 50 * u)
+            g = int(11 +  4 * u)
+            b = int(40 + 40 * u)
         pygame.draw.line(s, (r, g, b), (0, y), (SCREEN_WIDTH, y))
     return s
 
@@ -826,17 +889,44 @@ def draw_background():
     screen.blit(_nebula_surf, (0, -SCREEN_HEIGHT + oy))
     if oy < SCREEN_HEIGHT:
         screen.blit(_nebula_surf, (0, oy))
+    tick_s = pygame.time.get_ticks() * 0.001
     for star in stars:
         star[1] += star[3]
         if star[1] > SCREEN_HEIGHT:
             star[1] = 0
             star[0] = random.randint(0, SCREEN_WIDTH)
-        brightness = int(180 + 60 * math.sin(pygame.time.get_ticks() * 0.001 + star[0]))
+        # 별 깜빡임: 각 별의 위상(star[6]) 사용
+        flicker = 0.7 + 0.3 * math.sin(tick_s * (1.2 + star[5] * 0.3) + star[6])
         base = star[4]
-        col = (min(255, base[0] + brightness // 6),
-               min(255, base[1] + brightness // 6),
-               min(255, base[2] + brightness // 4))
+        col = (min(255, int(base[0] * flicker)),
+               min(255, int(base[1] * flicker)),
+               min(255, int(base[2] * flicker)))
         pygame.draw.circle(screen, col, (star[0], int(star[1])), star[2])
+
+    # ── 밝은 항성 (십자 광망 diffraction spike) ──────────────────────────
+    for bs in bright_stars:
+        bx, by, bcol, bphase = bs
+        pulse = 0.75 + 0.25 * math.sin(tick_s * 0.9 + bphase)
+        # 코어
+        core_r = int(3 * pulse)
+        if core_r > 0:
+            pygame.draw.circle(screen, bcol, (bx, by), core_r)
+        # 글로우 헤일로
+        for gr in [8, 5]:
+            gs = pygame.Surface((gr*2+1, gr*2+1), pygame.SRCALPHA)
+            ga = int(40 * pulse * (1 - gr/12))
+            pygame.draw.circle(gs, bcol+(ga,), (gr, gr), gr)
+            screen.blit(gs, (bx-gr, by-gr))
+        # 십자 광망 (spike)
+        spike_len = int(14 * pulse)
+        spike_col = (min(255,bcol[0]), min(255,bcol[1]), min(255,bcol[2]), int(120*pulse))
+        for dx, dy in [(1,0),(-1,0),(0,1),(0,-1)]:
+            for dist in range(1, spike_len):
+                a = int(110 * pulse * (1 - dist / spike_len))
+                sc = (min(255,bcol[0]), min(255,bcol[1]), min(255,bcol[2]))
+                ss = pygame.Surface((3,3), pygame.SRCALPHA)
+                pygame.draw.circle(ss, sc+(a,), (1,1), 1)
+                screen.blit(ss, (bx + dx*dist - 1, by + dy*dist - 1))
 
 # ════════════════════════════════════════════════════════════════════════════
 #  HUD (space_shooter.py)
