@@ -1378,6 +1378,7 @@ while running:
                         elif enemy[2] == 1: pts = 20
                         elif enemy[2] == 3: pts = 30
                         else:               pts = 10
+                        pts       *= hp_multiplier(current_wave)
                         score      += pts
                         wave_kills += 1
                         spawn_popup(f"+{pts}", cx2, cy2, ec.get(enemy[2], WHITE))
