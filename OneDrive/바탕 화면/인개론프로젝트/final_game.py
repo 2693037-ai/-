@@ -648,7 +648,7 @@ def start_wave(wave_num):
         wave_spawn_total    = wave_kill_goal + 15
         wave_spawn_interval = max(15, 30 - wave_num)
 
-        # ── 보스 직전 웨이브: n번째 보스 앞 n대 미니보스 전투기 출현 ─────
+        # ── 보스 직전 웨이브: 적 전투기만 출현, 일반 적 스폰 없음 ──────────
         if wave_num % BOSS_WAVE_INTERVAL == BOSS_WAVE_INTERVAL - 1:
             n_jets = wave_num // BOSS_WAVE_INTERVAL + 1
             for j in range(n_jets):
@@ -660,6 +660,8 @@ def start_wave(wave_num):
                 enemies.append([jx, jy, 6, ehp_j, phase, random.randint(60, 240)])
                 spawn_rings.append({'x': jx + enemy_width//2, 'y': jy + enemy_height//2,
                                     'max_r': 60, 'life': 50, 'max_life': 50})
+            wave_kill_goal   = n_jets
+            wave_spawn_total = 0   # 일반 적 스폰 차단
 
     laser_state               = 0
     laser_state_timer         = 0
