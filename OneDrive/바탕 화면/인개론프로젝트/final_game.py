@@ -50,6 +50,25 @@ SCORE_COL     = (200, 230, 255)
 clock = pygame.time.Clock()
 FPS   = 60
 
+# ── 베스트 스코어 영속 저장 ──────────────────────────────────────────────
+_BEST_SCORE_FILE = 'best_score.txt'
+
+def _load_best_score():
+    try:
+        with open(_BEST_SCORE_FILE, 'r') as f:
+            return max(0, int(f.read().strip()))
+    except Exception:
+        return 0
+
+def _save_best_score(s):
+    try:
+        with open(_BEST_SCORE_FILE, 'w') as f:
+            f.write(str(s))
+    except Exception:
+        pass
+
+best_score = _load_best_score()
+
 # ════════════════════════════════════════════════════════════════════════════
 #  스프라이트 생성 함수 (space_shooter.py)
 # ════════════════════════════════════════════════════════════════════════════
@@ -139,6 +158,34 @@ def make_enemy_sprite(etype, w=40, h=40):
         pts = [(sw//2, sh-2), (0, 2), (sw, 2)]
         pygame.draw.polygon(surf, (60, 150, 20), pts)
         pygame.draw.polygon(surf, (140, 255, 60), pts, 1)
+    elif etype == 6:
+        # 머리카락 폼폼 (3색)
+        for hx, hc in [(9,(255,60,60)),(20,(255,215,0)),(31,(80,140,255))]:
+            pygame.draw.circle(surf, hc, (hx, 6), 6)
+        # 흰 얼굴 타원
+        pygame.draw.ellipse(surf, (255, 255, 255), (4, 9, 32, 24))
+        pygame.draw.ellipse(surf, (210, 200, 210), (4, 9, 32, 24), 1)
+        # 파란 눈 패치
+        pygame.draw.ellipse(surf, (100, 170, 255), (5, 13, 11, 7))
+        pygame.draw.ellipse(surf, (100, 170, 255), (24, 13, 11, 7))
+        # 동공
+        pygame.draw.circle(surf, (0, 0, 0), (11, 17), 2)
+        pygame.draw.circle(surf, (0, 0, 0), (29, 17), 2)
+        # 빨간 코
+        pygame.draw.circle(surf, (255, 30, 30), (20, 22), 4)
+        pygame.draw.circle(surf, (255, 120, 120), (19, 21), 1)
+        # 웃음
+        pygame.draw.arc(surf, (200, 50, 50),
+                        pygame.Rect(10, 19, 20, 11), math.pi, 2*math.pi, 2)
+        # 팔 (저글링 자세)
+        pygame.draw.line(surf, (255, 210, 160), (5, 24), (0, 32), 2)
+        pygame.draw.line(surf, (255, 210, 160), (35, 24), (40, 32), 2)
+        # 손의 저글링 공 (핑크/노랑)
+        pygame.draw.circle(surf, HOT_PINK, (1, 33), 4)
+        pygame.draw.circle(surf, YELLOW,   (39, 33), 4)
+        # 칼라 (보라)
+        pygame.draw.polygon(surf, (200, 60, 200),
+                            [(12,33),(20,39),(28,33),(24,36),(16,36)])
     return surf
 
 def make_boss_sprite(w=80, h=48):
@@ -189,6 +236,16 @@ def make_enemy_bullet_surface(radius):
     pygame.draw.circle(surf, (255, 200, 80), (cx, cy), radius)
     return surf
 
+def make_clown_ball_surface(radius=8):
+    sz = (radius + 8) * 2
+    surf = pygame.Surface((sz, sz), pygame.SRCALPHA)
+    cx, cy = sz // 2, sz // 2
+    pygame.draw.circle(surf, (255, 80, 180, 50),  (cx, cy), radius + 7)
+    pygame.draw.circle(surf, (255, 120, 210, 100), (cx, cy), radius + 4)
+    pygame.draw.circle(surf, (255, 100, 200),      (cx, cy), radius)
+    pygame.draw.circle(surf, (255, 220, 240),      (cx-3, cy-3), 3)
+    return surf
+
 # ── 폰트 ──────────────────────────────────────────────────────────────────
 def load_korean_font(size, bold=False):
     for name in ("malgun gothic", "맑은 고딕", "gulim", "dotum", "batang"):
@@ -209,7 +266,7 @@ aug_desc_font  = load_korean_font(14)
 
 # ── 스프라이트 캐시 ───────────────────────────────────────────────────────
 PLAYER_SPRITE = make_player_sprite()
-ENEMY_SPRITES = {i: make_enemy_sprite(i) for i in range(6)}
+ENEMY_SPRITES = {i: make_enemy_sprite(i) for i in range(7)}
 BOSS_SPRITE   = make_boss_sprite()
 ITEM_SPRITES  = {1: make_item_sprite(1)}
 
@@ -219,7 +276,9 @@ def get_bullet_surf(radius):
         _bullet_surf_cache[radius] = make_bullet_surface(radius)
     return _bullet_surf_cache[radius]
 
-ENEMY_BULLET_SURF = make_enemy_bullet_surface(4)
+ENEMY_BULLET_SURF  = make_enemy_bullet_surface(4)
+CLOWN_BALL_RADIUS  = enemy_bullet_radius * 2   # = 8
+CLOWN_BALL_SURF    = make_clown_ball_surface(CLOWN_BALL_RADIUS)
 THRUSTER_FRAMES = [make_thruster_flame(i) for i in range(8)]
 thruster_frame = 0
 
@@ -262,6 +321,10 @@ item_speed  = 4
 
 # ── 파티클 ────────────────────────────────────────────────────────────────
 particles = []
+
+# ── 삐에로 공 / 숫자 이펙트 ───────────────────────────────────────────────
+clown_balls     = []   # [x, y, dx, dy, bounce_count]
+number_effects  = []   # {'num':'6'|'7', 'life':int, 'max_life':int}
 
 # ── 보스 ──────────────────────────────────────────────────────────────────
 boss_active       = False
@@ -382,8 +445,13 @@ AUGMENT_POOL = [
     {'id':'bullet_dmg',      'name':'탄환 대미지 +1',  'desc':'탄환 1발의 대미지가\n1 증가합니다.',                 'color':RED,      'icon':'damage'},
 ]
 
-augment_choices = []
-augment_hover   = -1
+augment_choices     = []
+augment_hover       = -1
+
+# ── 점수 증강 상태 ────────────────────────────────────────────────────────
+score_augment_threshold = 1000   # 다음 점수 증강 발동 기준
+_augment_return_state   = None   # 점수 증강 후 복귀할 wave_state
+_score_augment          = False  # 현재 증강이 점수 보너스 증강인지 여부
 
 def pick_augment_choices():
     global augment_choices
@@ -410,6 +478,17 @@ def apply_augment(aug_id):
         AUTO_FIRE_INTERVAL = max(AUTO_FIRE_INTERVAL - 2, 4)
     elif aug_id == 'bullet_dmg':
         bullet_damage += 1
+
+def _finish_augment(aug_id):
+    """증강 적용 후 상태 전환 — 점수 증강이면 게임으로 복귀, 아니면 다음 웨이브 시작."""
+    global wave_state, _augment_return_state, _score_augment
+    apply_augment(aug_id)
+    if _augment_return_state is not None:
+        wave_state            = _augment_return_state
+        _augment_return_state = None
+        _score_augment        = False
+    else:
+        start_wave(current_wave + 1)
 
 CARD_W, CARD_H = 142, 215
 CARD_GAP       = 7
@@ -509,13 +588,14 @@ def get_wave_enemy_table(wave):
     elif wave == 2:
         return [(0,1,60),(3,1,40)]
     elif wave == 3:
-        return [(0,1,40),(1,1,30),(3,1,30)]
+        return [(0,1,35),(1,1,30),(3,1,25),(6,4,10)]
     elif wave == 4:
-        return [(0,1,25),(1,1,25),(3,1,25),(4,2,25)]
+        return [(0,1,22),(1,1,22),(3,1,22),(4,2,22),(6,4,12)]
     else:
         w = min(wave, 10)
         extra = min(w - 4, 6) * 2
-        return [(0,1,max(5,15-extra)),(1,1,20),(3,1,20),(4,2,25+extra//2),(2,3,20+extra//2)]
+        clown_w = min(10 + (w-4)*2, 18)
+        return [(0,1,max(5,12-extra)),(1,1,18),(3,1,18),(4,2,22+extra//2),(2,3,18+extra//2),(6,4,clown_w)]
 
 def hp_multiplier(wave):
     """웨이브에 따른 적 HP 배율. 5웨이브마다 1씩 증가 (AI기말branch.py)."""
@@ -531,7 +611,10 @@ def spawn_wave_enemy(wave):
     ehp = ehp * hp_multiplier(wave)   # AI기말branch.py: 웨이브 배율 적용
     ex = random.randint(0, SCREEN_WIDTH - enemy_width)
     ey = -enemy_height
-    enemies.append([ex, ey, etype, ehp, ex])
+    if etype == 6:
+        enemies.append([ex, ey, etype, ehp, ex, random.randint(0, 150)])
+    else:
+        enemies.append([ex, ey, etype, ehp, ex])
 
 def start_wave(wave_num):
     global current_wave, wave_kills, wave_enemy_spawned
@@ -551,6 +634,8 @@ def start_wave(wave_num):
     enemies.clear()
     enemy_bullets.clear()
     items.clear()
+    clown_balls.clear()
+    number_effects.clear()
 
     if wave_num % BOSS_WAVE_INTERVAL == 0:
         wave_state         = 'boss'
@@ -588,6 +673,7 @@ def reset_game():
     global score, game_over, wave_clear_timer, boss_spawned_count
     global damage_flash_timer, invincible_timer, item_spawn_counter
     global _go_sound_played, _bgm_duck_timer
+    global score_augment_threshold, _augment_return_state, _score_augment
 
     player_x          = SCREEN_WIDTH//2 - player_width//2
     player_y          = SCREEN_HEIGHT   - player_height - 20
@@ -613,10 +699,15 @@ def reset_game():
     bullets.clear()
     particles.clear()
     popups.clear()
+    clown_balls.clear()
+    number_effects.clear()
     _bullet_surf_cache.clear()
 
-    _go_sound_played = False
-    _bgm_duck_timer  = 0
+    _go_sound_played        = False
+    _bgm_duck_timer         = 0
+    score_augment_threshold = 1000
+    _augment_return_state   = None
+    _score_augment          = False
 
     # 게임 시작 전 증강 선택 (AI기말branch.py)
     global current_wave, wave_state
@@ -672,37 +763,49 @@ def draw_background():
 # ════════════════════════════════════════════════════════════════════════════
 
 def draw_hud():
-    hud_height = 54
+    hud_height = 70
     hud_surf = pygame.Surface((SCREEN_WIDTH, hud_height), pygame.SRCALPHA)
     hud_surf.fill((5, 8, 25, 210))
     screen.blit(hud_surf, (0, 0))
     pygame.draw.line(screen, HUD_BORDER, (0, hud_height), (SCREEN_WIDTH, hud_height), 1)
 
+    # BEST SCORE (상단 작은 행)
+    best_label = hp_font.render("BEST", True, (80, 110, 160))
+    best_val   = hp_font.render(f"{best_score:,}", True, (150, 175, 215))
+    screen.blit(best_label, (12, 4))
+    screen.blit(best_val,   (12 + best_label.get_width() + 5, 4))
+
+    # 구분선
+    pygame.draw.line(screen, (25, 35, 70), (12, 19), (120, 19), 1)
+
+    # SCORE (하단 큰 행)
     score_label = small_font.render("SCORE", True, (120, 150, 200))
     score_val   = font.render(f"{score:,}", True, SCORE_COL)
-    screen.blit(score_label, (12, 6))
-    screen.blit(score_val,   (12, 22))
+    screen.blit(score_label, (12, 22))
+    screen.blit(score_val,   (12, 38))
 
+    # WAVE (중앙)
     wave_label_text = f"WAVE  {current_wave}"
     if wave_state == 'boss':
         wave_label_text = f"WAVE  {current_wave}  ★BOSS★"
     wt = font.render(wave_label_text, True, WAVE_GOLD)
-    screen.blit(wt, (SCREEN_WIDTH//2 - wt.get_width()//2, 8))
+    screen.blit(wt, (SCREEN_WIDTH//2 - wt.get_width()//2, 10))
     if wave_state == 'playing':
-        bar_w = 100
+        bar_w = 90
         bar_x = SCREEN_WIDTH//2 - bar_w//2
-        bar_y = 36
+        bar_y = 50
         ratio  = min(1.0, wave_kills / wave_kill_goal) if wave_kill_goal else 0
-        pygame.draw.rect(screen, (30, 30, 50), (bar_x, bar_y, bar_w, 8), border_radius=4)
+        pygame.draw.rect(screen, (30, 30, 50), (bar_x, bar_y, bar_w, 7), border_radius=3)
         if ratio > 0:
             fill_col = (80 + int(175 * ratio), 200 - int(100 * ratio), 80)
-            pygame.draw.rect(screen, fill_col, (bar_x, bar_y, int(bar_w * ratio), 8), border_radius=4)
-        pygame.draw.rect(screen, (80, 80, 120), (bar_x, bar_y, bar_w, 8), 1, border_radius=4)
-        kill_t = small_font.render(f"{wave_kills}/{wave_kill_goal}", True, (180, 180, 220))
-        screen.blit(kill_t, (SCREEN_WIDTH//2 - kill_t.get_width()//2, bar_y + 10))
+            pygame.draw.rect(screen, fill_col, (bar_x, bar_y, int(bar_w * ratio), 7), border_radius=3)
+        pygame.draw.rect(screen, (80, 80, 120), (bar_x, bar_y, bar_w, 7), 1, border_radius=3)
+        kill_t = hp_font.render(f"{wave_kills}/{wave_kill_goal}", True, (180, 180, 220))
+        screen.blit(kill_t, (bar_x + bar_w + 5, bar_y))
 
+    # HP (우측)
     hp_label = small_font.render("HP", True, (120, 150, 200))
-    screen.blit(hp_label, (SCREEN_WIDTH - 105, 6))
+    screen.blit(hp_label, (SCREEN_WIDTH - 105, 4))
     for i in range(player_max_hp):
         bx = SCREEN_WIDTH - 100 + i * 28
         by = 22
@@ -789,10 +892,15 @@ def draw_game_over(tick):
     screen.blit(panel, (SCREEN_WIDTH//2 - 130, SCREEN_HEIGHT//2 - 30))
     pygame.draw.rect(screen, (60, 20, 80),
                      (SCREEN_WIDTH//2 - 130, SCREEN_HEIGHT//2 - 30, 260, 90), 1, border_radius=4)
+    is_new_best = (score >= best_score and score > 0)
     st  = font.render(f"SCORE  {score:,}", True, WAVE_GOLD)
     wt2 = font.render(f"WAVE   {current_wave}", True, SCORE_COL)
-    screen.blit(st,  (SCREEN_WIDTH//2 - st.get_width()//2,  SCREEN_HEIGHT//2 - 20))
-    screen.blit(wt2, (SCREEN_WIDTH//2 - wt2.get_width()//2, SCREEN_HEIGHT//2 + 15))
+    bst = small_font.render(
+        f"BEST  {best_score:,}{'  ★NEW BEST!★' if is_new_best else ''}",
+        True, (255, 215, 0) if is_new_best else (130, 155, 195))
+    screen.blit(st,  (SCREEN_WIDTH//2 - st.get_width()//2,  SCREEN_HEIGHT//2 - 28))
+    screen.blit(wt2, (SCREEN_WIDTH//2 - wt2.get_width()//2, SCREEN_HEIGHT//2 + 7))
+    screen.blit(bst, (SCREEN_WIDTH//2 - bst.get_width()//2, SCREEN_HEIGHT//2 + 42))
     if (tick // 30) % 2 == 0:
         rt = font.render("[ R ]  RESTART", True, WHITE)
         screen.blit(rt, (SCREEN_WIDTH//2 - rt.get_width()//2, SCREEN_HEIGHT//2 + 75))
@@ -812,9 +920,16 @@ def draw_augment_screen(tick):
     pygame.draw.line(screen, HUD_BORDER, (0, 190), (SCREEN_WIDTH, 190), 1)
     pulse = 0.5 + 0.5 * math.sin(tick * 0.05)
     gold_pulse = (int(220 + 35*pulse), int(190 + 25*pulse), int(50 + 10*pulse))
-    draw_text_outlined(screen, "증강 선택", big_font, gold_pulse,
-                       SCREEN_WIDTH//2 - big_font.size("증강 선택")[0]//2, 120, (60, 40, 0))
-    sub = small_font.render("하나를 선택해 플레이어를 강화하세요", True, (160, 180, 220))
+    if _score_augment:
+        bonus_col = (int(255), int(210 + 45*pulse), int(60 + 20*pulse))
+        draw_text_outlined(screen, "BONUS UPGRADE!", big_font, bonus_col,
+                           SCREEN_WIDTH//2 - big_font.size("BONUS UPGRADE!")[0]//2, 115, (80, 50, 0))
+        sub_text = f"점수 {score_augment_threshold - 1000:,}점 달성! 강화 아이템을 선택하세요"
+    else:
+        draw_text_outlined(screen, "증강 선택", big_font, gold_pulse,
+                           SCREEN_WIDTH//2 - big_font.size("증강 선택")[0]//2, 120, (60, 40, 0))
+        sub_text = "하나를 선택해 플레이어를 강화하세요"
+    sub = small_font.render(sub_text, True, (160, 180, 220))
     screen.blit(sub, (SCREEN_WIDTH//2 - sub.get_width()//2, 168))
 
     for i, aug in enumerate(augment_choices):
@@ -963,18 +1078,17 @@ while running:
             # 증강 선택 키보드 단축키 (AI기말branch.py)
             if wave_state == 'augment':
                 if event.key == pygame.K_1 and len(augment_choices) > 0:
-                    apply_augment(augment_choices[0]['id']); start_wave(current_wave + 1)
+                    _finish_augment(augment_choices[0]['id'])
                 elif event.key == pygame.K_2 and len(augment_choices) > 1:
-                    apply_augment(augment_choices[1]['id']); start_wave(current_wave + 1)
+                    _finish_augment(augment_choices[1]['id'])
                 elif event.key == pygame.K_3 and len(augment_choices) > 2:
-                    apply_augment(augment_choices[2]['id']); start_wave(current_wave + 1)
+                    _finish_augment(augment_choices[2]['id'])
 
         if wave_state == 'augment' and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mx, my = event.pos
             for i in range(3):
                 if card_rect(i).collidepoint(mx, my):
-                    apply_augment(augment_choices[i]['id'])
-                    start_wave(current_wave + 1)
+                    _finish_augment(augment_choices[i]['id'])
                     break
 
         if wave_state == 'augment' and event.type == pygame.MOUSEMOTION:
@@ -1001,6 +1115,11 @@ while running:
     thruster_frame = (global_tick // 4) % 8
     if game_over:
         game_over_tick += 1
+
+    # ── 베스트 스코어 갱신 ───────────────────────────────────────────────
+    if score > best_score:
+        best_score = score
+        _save_best_score(best_score)
 
     # ── BGM 덕킹 복구 ─────────────────────────────────────────────────────
     if _bgm_duck_timer > 0:
@@ -1050,9 +1169,13 @@ while running:
                 laser_x = random.randint(50, SCREEN_WIDTH-50)
                 laser_y = random.randint(150, SCREEN_HEIGHT-120)
                 laser_damaged_player = False; laser_spawn_counter = 0
+                sounds['laser_warning'].play()
         elif laser_state == 1:
             laser_state_timer += 1
-            if laser_state_timer >= 90: laser_state = 2; laser_state_timer = 0
+            if laser_state_timer >= 90:
+                laser_state = 2; laser_state_timer = 0
+                sounds['laser_warning'].stop()
+                sounds['laser_fire'].play()
         elif laser_state == 2:
             laser_state_timer += 1
             if not laser_damaged_player and invincible_timer == 0:
@@ -1079,6 +1202,42 @@ while running:
         for eb in enemy_bullets[:]:
             eb[0] += eb[2]; eb[1] += eb[3]
             if eb[1] > SCREEN_HEIGHT or eb[0] < 0 or eb[0] > SCREEN_WIDTH: enemy_bullets.remove(eb)
+
+        # ── 삐에로 공 이동 및 튕김 ──────────────────────────────────────
+        CBR = CLOWN_BALL_RADIUS
+        for ball in clown_balls[:]:
+            ball[0] += ball[2]; ball[1] += ball[3]
+            bounced = False
+            if ball[0] - CBR <= 0:
+                ball[0] = CBR; ball[2] = abs(ball[2]); bounced = True
+            elif ball[0] + CBR >= SCREEN_WIDTH:
+                ball[0] = SCREEN_WIDTH - CBR; ball[2] = -abs(ball[2]); bounced = True
+            if ball[1] - CBR <= 0:
+                ball[1] = CBR; ball[3] = abs(ball[3])
+                if not bounced: bounced = True
+            elif ball[1] + CBR >= SCREEN_HEIGHT:
+                ball[1] = SCREEN_HEIGHT - CBR; ball[3] = -abs(ball[3])
+                if not bounced: bounced = True
+            if bounced:
+                ball[4] += 1
+                sounds['clown_bounce'].play()
+                if ball[4] == 6:
+                    number_effects.append({'num': '6', 'life': 90, 'max_life': 90})
+                elif ball[4] >= 7:
+                    number_effects.append({'num': '7', 'life': 90, 'max_life': 90})
+                    for i in range(12):
+                        a = math.radians(i * 30)
+                        enemy_bullets.append([ball[0], ball[1],
+                                              enemy_bullet_speed * math.sin(a),
+                                              enemy_bullet_speed * math.cos(a)])
+                    spawn_explosion(int(ball[0]), int(ball[1]), HOT_PINK, 30)
+                    sounds['explode'].play()
+                    if ball in clown_balls: clown_balls.remove(ball)
+
+        # ── 숫자 이펙트 타이머 ───────────────────────────────────────────
+        for eff in number_effects[:]:
+            eff['life'] -= 1
+            if eff['life'] <= 0: number_effects.remove(eff)
 
         # ── 보스 웨이브 ──────────────────────────────────────────────────
         if wave_state == 'boss' and boss_active:
@@ -1145,6 +1304,21 @@ while running:
             if enemy[2] == 2:   spd = 2
             elif enemy[2] == 3: spd = 5
             elif enemy[2] == 4: spd = 2
+            elif enemy[2] == 6:
+                enemy[1] += enemy_speed / 6
+                enemy[5] += 1
+                if enemy[5] >= 300:
+                    enemy[5] = 0
+                    cx6 = int(enemy[0] + enemy_width // 2)
+                    cy6 = int(enemy[1] + enemy_height // 2)
+                    cspd = enemy_bullet_speed * 2
+                    side = random.choice([-1, 1])
+                    bdx = side * cspd * math.sin(math.radians(30))
+                    bdy = cspd * math.cos(math.radians(30))
+                    clown_balls.append([float(cx6), float(cy6), bdx, bdy, 0])
+                if enemy[1] > SCREEN_HEIGHT:
+                    if enemy in enemies: enemies.remove(enemy)
+                continue
             elif enemy[2] == 5:
                 enemy[0] += enemy[5]; enemy[1] += enemy[6]
                 if enemy[1] > SCREEN_HEIGHT or enemy[0] < -SPLIT_WIDTH or enemy[0] > SCREEN_WIDTH+SPLIT_WIDTH:
@@ -1187,7 +1361,7 @@ while running:
                         if enemy in enemies: enemies.remove(enemy)
                         cx2 = enemy[0] + ew//2
                         cy2 = enemy[1] + eh//2
-                        ec  = {0:RED,1:ORANGE,2:YELLOW,3:CYAN,4:LIME,5:LIME_DARK}
+                        ec  = {0:RED,1:ORANGE,2:YELLOW,3:CYAN,4:LIME,5:LIME_DARK,6:HOT_PINK}
                         spawn_explosion(cx2, cy2, ec.get(enemy[2], RED), 20)
                         sounds['explode'].play()
                         if enemy[2] == 4:
@@ -1257,6 +1431,22 @@ while running:
                             sounds['bgm'].fadeout(600)
                             sounds['game_over'].play()
 
+            for ball in clown_balls[:]:
+                br2 = pygame.Rect(int(ball[0])-CBR, int(ball[1])-CBR, CBR*2, CBR*2)
+                if pr.colliderect(br2):
+                    if ball in clown_balls: clown_balls.remove(ball)
+                    player_hp -= 1
+                    damage_flash_timer = 20; invincible_timer = 90
+                    spawn_explosion(int(ball[0]), int(ball[1]), HOT_PINK, 20)
+                    sounds['player_hit'].play()
+                    if player_hp <= 0:
+                        game_over = True
+                        if not _go_sound_played:
+                            _go_sound_played = True
+                            sounds['bgm'].fadeout(600)
+                            sounds['game_over'].play()
+                    break
+
             if wave_state == 'boss' and boss_active:
                 if pr.colliderect(pygame.Rect(boss_x, boss_y, boss_width, boss_height)):
                     player_hp = 0
@@ -1280,10 +1470,21 @@ while running:
                 sounds['item'].play()
 
         # ── 웨이브 클리어 판정 ───────────────────────────────────────────
+        # ── 점수 1000점마다 보너스 증강 ─────────────────────────────────────
+        if (not game_over and wave_state in ('playing', 'boss')
+                and score >= score_augment_threshold):
+            score_augment_threshold += 1000
+            _augment_return_state    = wave_state
+            _score_augment           = True
+            wave_state               = 'augment'
+            pick_augment_choices()
+            spawn_popup("BONUS UPGRADE!", SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 30, GOLD)
+
         if not game_over and wave_kills >= wave_kill_goal and len(enemies) == 0 and wave_state in ('playing','boss'):
             wave_state       = 'wave_clear'
             wave_clear_timer = 0
             enemies.clear(); enemy_bullets.clear(); bullets.clear()
+            clown_balls.clear()
             sounds['bgm'].set_volume(0.08)
             sounds['wave_clear'].play()
             _bgm_duck_timer = 90
@@ -1293,6 +1494,9 @@ while running:
         for p in particles[:]:
             p['x'] += p['dx']; p['y'] += p['dy']; p['life'] -= 1
             if p['life'] <= 0: particles.remove(p)
+        for eff in number_effects[:]:
+            eff['life'] -= 1
+            if eff['life'] <= 0: number_effects.remove(eff)
         wave_clear_timer += 1
         if wave_clear_timer >= WAVE_CLEAR_SHOW:
             sounds['bgm'].set_volume(BGM_FULL_VOL)
@@ -1341,7 +1545,7 @@ while running:
             spr = ENEMY_SPRITES.get(etype)
             if spr:
                 screen.blit(spr, (ex, ey))
-            max_hp_map = {0:1,1:1,2:3,3:1,4:2,5:1}
+            max_hp_map = {0:1,1:1,2:3,3:1,4:2,5:1,6:4}
             ehp_max = max_hp_map.get(etype, 1) * hp_multiplier(current_wave)
             if enemy[3] < ehp_max or ehp_max > 1:
                 draw_hp_bar(screen, ex, ey - 8, ew, enemy[3], ehp_max)
@@ -1391,6 +1595,12 @@ while running:
                 pygame.draw.circle(ps, col + (a,), (r, r), r)
                 screen.blit(ps, (int(p['x'])-r, int(p['y'])-r))
 
+        # 삐에로 공
+        for ball in clown_balls:
+            screen.blit(CLOWN_BALL_SURF,
+                        (int(ball[0]) - CLOWN_BALL_SURF.get_width()//2,
+                         int(ball[1]) - CLOWN_BALL_SURF.get_height()//2))
+
         # 아이템
         for item in items:
             float_offset = int(3 * math.sin(global_tick * 0.1 + item[0]))
@@ -1423,6 +1633,30 @@ while running:
 
     elif wave_state == 'augment':
         draw_augment_screen(global_tick)
+
+    # 숫자 이펙트 (삐에로 공 6번/7번 튕김) – 화면 전체 오버레이
+    if number_effects:
+        for eff in number_effects:
+            ratio   = 1 - eff['life'] / eff['max_life']   # 0→1
+            alpha   = int(200 * (1 - ratio))
+            scale_f = 3.0 + ratio * 7.0                   # 3x→10x
+            if alpha <= 0:
+                continue
+            outline_col = (255, 80,  160)
+            fill_col    = (255, 190, 220)
+            base  = big_font.render(eff['num'], True, fill_col)
+            bw, bh = base.get_size()
+            sw, sh = max(1, int(bw * scale_f)), max(1, int(bh * scale_f))
+            out_s  = big_font.render(eff['num'], True, outline_col)
+            out_sc = pygame.transform.scale(out_s, (sw, sh))
+            out_sc.set_alpha(alpha)
+            cx_n = SCREEN_WIDTH//2 - sw//2
+            cy_n = SCREEN_HEIGHT//2 - sh//2
+            for ox, oy in [(-5,0),(5,0),(0,-5),(0,5)]:
+                screen.blit(out_sc, (cx_n+ox, cy_n+oy))
+            fill_sc = pygame.transform.scale(base, (sw, sh))
+            fill_sc.set_alpha(alpha)
+            screen.blit(fill_sc, (cx_n, cy_n))
 
     if game_over:
         draw_game_over(game_over_tick)
