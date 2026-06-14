@@ -1464,7 +1464,9 @@ while running:
         # ── 일반 웨이브: 적 생성 ─────────────────────────────────────────
         if wave_state == 'playing' and not boss_active:
             enemy_spawn_counter += 1
-            if enemy_spawn_counter >= wave_spawn_interval and wave_kills < wave_kill_goal:
+            if (enemy_spawn_counter >= wave_spawn_interval
+                    and wave_kills < wave_kill_goal
+                    and wave_enemy_spawned < wave_spawn_total):
                 spawn_wave_enemy(current_wave)
                 wave_enemy_spawned += 1
                 enemy_spawn_counter = 0
