@@ -431,6 +431,7 @@ boss_laser_state          = 0
 boss_laser_timer          = 0
 boss_laser_counter        = 0
 boss_laser_xs             = []
+boss_laser_ys             = []   # 수평 레이저 Y 좌표 (20웨이브+)
 boss_laser_damaged_player = False
 BOSS_LASER_INTERVAL       = 450
 
@@ -551,6 +552,232 @@ def _make_bg_base():
 
 _bg_base = _make_bg_base()
 
+# ════════════════════════════════════════════════════════════════════════════
+#  천체 배경 시스템 (태양→수성→금성→지구→화성→목성→토성→천왕성→해왕성→명왕성)
+# ════════════════════════════════════════════════════════════════════════════
+
+_CELESTIAL_DEFS = [
+    # (이름, bg_top_rgb, bg_bot_rgb, glow_rgb, type, base_radius)
+    ('태양',   ( 85, 38,  4), (38, 14,  2), (255, 210,  70), 'star',    140),
+    ('수성',   ( 26, 21, 17), ( 9,  8,  6), (155, 145, 132), 'mercury',  68),
+    ('금성',   ( 62, 46, 10), (30, 21,  5), (232, 202, 108), 'venus',    88),
+    ('지구',   ( 10, 28, 68), ( 5, 14, 40), ( 78, 158, 255), 'earth',    95),
+    ('화성',   ( 58, 20, 10), (28, 10,  4), (212,  88,  48), 'mars',     80),
+    ('목성',   ( 50, 36, 20), (22, 15,  8), (198, 138,  78), 'jupiter', 112),
+    ('토성',   ( 55, 45, 25), (24, 21, 10), (212, 182, 102), 'saturn',   98),
+    ('천왕성', ( 10, 50, 58), ( 4, 24, 30), ( 78, 212, 220), 'uranus',   84),
+    ('해왕성', (  5, 20, 68), ( 2,  9, 40), ( 48, 100, 228), 'neptune',  78),
+    ('명왕성', ( 16, 12, 20), ( 5,  4,  8), (130, 108, 140), 'pluto',    52),
+]
+
+def get_celestial_idx(wave):
+    """웨이브 → 천체 인덱스 (0=태양 … 9=명왕성, 웨이브 2개마다 전진)."""
+    return min((max(wave, 1) - 1) // 2, len(_CELESTIAL_DEFS) - 1)
+
+def _make_planet_surf(idx):
+    _, _bt, _bb, gc, ptype, base_r = _CELESTIAL_DEFS[idx]
+    r  = base_r
+    sz = r * 2 + 70
+    surf = pygame.Surface((sz, sz), pygame.SRCALPHA)
+    cx = cy = sz // 2
+    random.seed(idx * 137 + 7)
+
+    if ptype == 'star':  # ── 태양 ─────────────────────────────────────────
+        for glow_r, ga in [(r+50, 8), (r+35, 18), (r+20, 35), (r+8, 60)]:
+            gs = pygame.Surface((glow_r*2, glow_r*2), pygame.SRCALPHA)
+            pygame.draw.circle(gs, (255, 200, 80, ga), (glow_r, glow_r), glow_r)
+            surf.blit(gs, (cx-glow_r, cy-glow_r))
+        for i in range(14):
+            ang2 = math.radians(i * (360/14))
+            slen2 = r + random.randint(18, 44)
+            sx2 = int(cx + math.cos(ang2) * slen2)
+            sy2 = int(cy + math.sin(ang2) * slen2)
+            bx2 = int(cx + math.cos(ang2) * (r - 4))
+            by2 = int(cy + math.sin(ang2) * (r - 4))
+            spike_s = pygame.Surface((sz, sz), pygame.SRCALPHA)
+            pygame.draw.line(spike_s, (255, 230, 120, 65),
+                             (bx2, by2), (sx2, sy2), max(1, 4 - i % 3))
+            surf.blit(spike_s, (0, 0))
+        pygame.draw.circle(surf, (255, 255, 220), (cx, cy), r)
+        pygame.draw.circle(surf, (255, 238, 160), (cx, cy), r - 8)
+        pygame.draw.circle(surf, (255, 215, 100), (cx, cy), r - 22)
+        pygame.draw.circle(surf, (255, 180,  50), (cx, cy), r - 40)
+
+    elif ptype == 'mercury':  # ── 수성 ────────────────────────────────────
+        pygame.draw.circle(surf, (148, 138, 128), (cx, cy), r)
+        for _ in range(20):
+            cr_x = cx + random.randint(-(r-8), r-8)
+            cr_y = cy + random.randint(-(r-8), r-8)
+            cr_r = random.randint(3, 14)
+            if math.sqrt((cr_x-cx)**2+(cr_y-cy)**2)+cr_r < r-5:
+                pygame.draw.circle(surf, (100, 92, 84), (cr_x, cr_y), cr_r)
+                pygame.draw.circle(surf, (172, 164, 155),
+                                   (cr_x-cr_r//3, cr_y-cr_r//3), max(1, cr_r//3))
+
+    elif ptype == 'venus':  # ── 금성 ────────────────────────────────────
+        pygame.draw.circle(surf, (228, 198, 105), (cx, cy), r)
+        for by in range(-(r-5), r-5, 9):
+            bw = int(math.sqrt(max(0, r**2-by**2)))
+            if bw > 0:
+                bs = pygame.Surface((bw*2, 7), pygame.SRCALPHA)
+                a_b = random.randint(28, 68)
+                col_b = random.choice([(248, 230, 152, a_b), (212, 188, 90, a_b)])
+                bs.fill(col_b)
+                surf.blit(bs, (cx-bw, cy+by-3))
+
+    elif ptype == 'earth':  # ── 지구 ────────────────────────────────────
+        pygame.draw.circle(surf, (28, 76, 175), (cx, cy), r)
+        continents = [
+            (cx-22, cy-16, 36, 22, (55, 138, 58)),
+            (cx+10, cy-18, 28, 18, (62, 148, 62)),
+            (cx+24, cy+ 4, 30, 20, (58, 142, 58)),
+            (cx- 8, cy+10, 18, 12, (52, 132, 55)),
+            (cx-32, cy+ 5, 14, 10, (50, 128, 52)),
+        ]
+        for lx, ly, lw, lh, lc in continents:
+            if math.sqrt((lx-cx)**2+(ly-cy)**2)+max(lw,lh)//2 < r-3:
+                ls = pygame.Surface((lw, lh), pygame.SRCALPHA)
+                pygame.draw.ellipse(ls, lc+(210,), (0, 0, lw, lh))
+                surf.blit(ls, (lx-lw//2, ly-lh//2))
+        for clx, cly, clw, clh in [(cx-18, cy-8, 38, 10), (cx+10, cy+5, 28, 9), (cx-5, cy-22, 22, 7)]:
+            if math.sqrt((clx-cx)**2+(cly-cy)**2) < r-6:
+                cs2 = pygame.Surface((clw, clh), pygame.SRCALPHA)
+                pygame.draw.ellipse(cs2, (255, 255, 255, 155), (0, 0, clw, clh))
+                surf.blit(cs2, (clx-clw//2, cly-clh//2))
+        pygame.draw.ellipse(surf, (220, 235, 255), (cx-18, cy-r+4,  36, 18))
+        pygame.draw.ellipse(surf, (220, 235, 255), (cx-12, cy+r-18, 24, 14))
+
+    elif ptype == 'mars':  # ── 화성 ────────────────────────────────────
+        pygame.draw.circle(surf, (195, 80, 42), (cx, cy), r)
+        for _ in range(14):
+            cr_x = cx + random.randint(-(r-6), r-6)
+            cr_y = cy + random.randint(-(r-6), r-6)
+            cr_r = random.randint(4, 16)
+            if math.sqrt((cr_x-cx)**2+(cr_y-cy)**2)+cr_r < r-5:
+                pygame.draw.circle(surf, (145, 52, 22), (cr_x, cr_y), cr_r)
+                pygame.draw.circle(surf, (228, 115, 70),
+                                   (cr_x-cr_r//3, cr_y-cr_r//3), max(1, cr_r//3))
+        pygame.draw.ellipse(surf, (235, 240, 252), (cx-15, cy-r+5, 30, 16))
+        pygame.draw.circle(surf, (158, 58, 26), (cx-r//3, cy-r//4), r//6)
+
+    elif ptype == 'jupiter':  # ── 목성 ──────────────────────────────────
+        pygame.draw.circle(surf, (195, 152, 88), (cx, cy), r)
+        for by, bh, bc in [
+            (int(-r*.62), r//5, (170, 118,  62, 160)),
+            (int(-r*.30), r//6, (218, 168,  98, 140)),
+            (0,           r//5, (158, 102,  52, 170)),
+            (int( r*.32), r//6, (228, 182, 108, 130)),
+            (int( r*.58), r//7, (175, 125,  65, 150)),
+        ]:
+            bw = int(math.sqrt(max(0, r**2-by**2)))
+            if bw > 0 and bh > 0:
+                bs = pygame.Surface((bw*2, bh), pygame.SRCALPHA)
+                bs.fill(bc)
+                surf.blit(bs, (cx-bw, cy+by))
+        pygame.draw.ellipse(surf, (188, 74,  56), (cx+r//3-15, cy+r//4-9, 30, 18))
+        pygame.draw.ellipse(surf, (212, 95,  74), (cx+r//3-10, cy+r//4-6, 20, 12))
+
+    elif ptype == 'saturn':  # ── 토성 (링 포함) ──────────────────────────
+        ring_cols_s = [
+            (205, 178, 102, 55), (218, 192, 115, 85),
+            (190, 164,  90, 65), (234, 210, 130, 95), (175, 150,  78, 45),
+        ]
+        # 뒤쪽 링
+        for ri2, rc2 in enumerate(ring_cols_s):
+            rr2 = r + 12 + ri2*13; rh2 = max(4, 24-ri2*4)
+            rs2 = pygame.Surface((rr2*2, rh2), pygame.SRCALPHA)
+            pygame.draw.ellipse(rs2, rc2, (0, 0, rr2*2, rh2))
+            surf.blit(rs2, (cx-rr2, cy+r//5-rh2//2))
+        # 행성 본체
+        pygame.draw.circle(surf, (212, 188, 108), (cx, cy), r)
+        # 앞쪽 링 (행성 앞에 보이는 아랫부분)
+        for ri2, rc2 in enumerate(ring_cols_s):
+            rr2 = r + 12 + ri2*13; rh2 = max(4, 24-ri2*4)
+            rs3 = pygame.Surface((rr2*2, rh2), pygame.SRCALPHA)
+            pygame.draw.ellipse(rs3, rc2, (0, 0, rr2*2, rh2))
+            area3 = pygame.Rect(0, rh2//2, rr2*2, rh2-rh2//2)
+            surf.blit(rs3, (cx-rr2, cy+r//5), area=area3)
+
+    elif ptype == 'uranus':  # ── 천왕성 ────────────────────────────────
+        pygame.draw.circle(surf, (78, 205, 218), (cx, cy), r)
+        for by in range(-(r//2), r//2, 8):
+            bw = int(math.sqrt(max(0, r**2-by**2)))
+            if bw > 0:
+                bs = pygame.Surface((bw*2, 5), pygame.SRCALPHA)
+                bs.fill((50, 165, 180, 38))
+                surf.blit(bs, (cx-bw, cy+by-2))
+
+    elif ptype == 'neptune':  # ── 해왕성 ────────────────────────────────
+        pygame.draw.circle(surf, (42, 92, 228), (cx, cy), r)
+        for by in range(-(r//2), r//2, 10):
+            bw = int(math.sqrt(max(0, r**2-by**2)))
+            if bw > 0:
+                bs = pygame.Surface((bw*2, 6), pygame.SRCALPHA)
+                bs.fill((22, 58, 185, 48))
+                surf.blit(bs, (cx-bw, cy+by-3))
+        pygame.draw.ellipse(surf, (18, 50, 175), (cx-r//3, cy-r//5, 26, 18))
+
+    elif ptype == 'pluto':  # ── 명왕성 ────────────────────────────────
+        pygame.draw.circle(surf, (122, 105, 135), (cx, cy), r)
+        for _ in range(10):
+            px2 = cx + random.randint(-(r-5), r-5)
+            py2 = cy + random.randint(-(r-5), r-5)
+            pr2 = random.randint(3, 10)
+            if math.sqrt((px2-cx)**2+(py2-cy)**2)+pr2 < r-4:
+                pygame.draw.circle(surf, (88, 72, 100), (px2, py2), pr2)
+        for hx2, hy2, hw2, hh2 in [(cx+4, cy+4, 22, 16), (cx-9, cy+4, 18, 16)]:
+            hs2 = pygame.Surface((hw2, hh2), pygame.SRCALPHA)
+            pygame.draw.ellipse(hs2, (172, 162, 180, 185), (0, 0, hw2, hh2))
+            surf.blit(hs2, (hx2-hw2//2, hy2-hh2//2))
+
+    # ── 공통: 대기 글로우 + 그림자 림 (항성 제외) ────────────────────────
+    if ptype != 'star':
+        for ga_r in range(6, 0, -1):
+            ga_s = pygame.Surface((sz, sz), pygame.SRCALPHA)
+            a_val = int(20 * ga_r / 6)
+            pygame.draw.circle(ga_s, gc+(a_val,), (cx, cy), r+ga_r*3)
+            surf.blit(ga_s, (0, 0))
+        shadow = pygame.Surface((sz, sz), pygame.SRCALPHA)
+        pygame.draw.circle(shadow, (0, 0, 0, 65), (cx-r//4, cy-r//4), r)
+        surf.blit(shadow, (0, 0))
+        pygame.draw.circle(surf, (0, 0, 0, 50), (cx, cy), r, 3)
+
+    random.seed()
+    return surf
+
+_PLANET_SURFS = {i: _make_planet_surf(i) for i in range(len(_CELESTIAL_DEFS))}
+_planet_scaled_cache = {}
+
+def _get_scaled_planet(cel_idx, wave):
+    wave_in_zone = (max(wave, 1) - 1) % 2
+    key = (cel_idx, wave_in_zone)
+    if key not in _planet_scaled_cache:
+        ps = _PLANET_SURFS.get(cel_idx)
+        if ps:
+            scale = 0.72 + 0.28 * wave_in_zone
+            pw = int(ps.get_width()  * scale)
+            ph = int(ps.get_height() * scale)
+            _planet_scaled_cache[key] = pygame.transform.smoothscale(ps, (pw, ph)) if pw > 0 and ph > 0 else None
+        else:
+            _planet_scaled_cache[key] = None
+    return _planet_scaled_cache[key]
+
+def _make_celestial_bg(idx):
+    _, bt, bb, _, _, _ = _CELESTIAL_DEFS[idx]
+    s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+    for y in range(SCREEN_HEIGHT):
+        t = y / SCREEN_HEIGHT
+        r2 = int(bt[0]+(bb[0]-bt[0])*t)
+        g2 = int(bt[1]+(bb[1]-bt[1])*t)
+        b2 = int(bt[2]+(bb[2]-bt[2])*t)
+        pygame.draw.line(s, (r2, g2, b2), (0, y), (SCREEN_WIDTH, y))
+    return s
+
+_CELESTIAL_BG_CACHE = {i: _make_celestial_bg(i) for i in range(len(_CELESTIAL_DEFS))}
+_celestial_banner    = {'name': '', 'timer': 0, 'max_timer': 180, 'color': (255, 255, 255)}
+_planet_scroll_y     = 0.0        # 행성 스크롤 Y 위치 (위→아래)
+_planet_scroll_speed = 0.35       # 픽셀/프레임 (느리게 지나가는 속도)
+
 # ── 자동 연사 ─────────────────────────────────────────────────────────────
 auto_fire_counter = 0
 
@@ -594,9 +821,19 @@ augment_choices     = []
 augment_hover       = -1
 
 
+def is_augment_maxed(aug_id):
+    if aug_id == 'bullet_straight': return bullet_straight >= 3
+    if aug_id == 'bullet_spread':   return bullet_spread   >= 3
+    if aug_id == 'move_spd':        return player_speed    >= 12
+    if aug_id == 'bullet_spd':      return bullet_speed    >= 20
+    if aug_id == 'fire_rate':       return AUTO_FIRE_INTERVAL <= 4
+    return False
+
 def pick_augment_choices():
     global augment_choices
-    augment_choices = random.sample(AUGMENT_POOL, 3)
+    available = [a for a in AUGMENT_POOL if not is_augment_maxed(a['id'])]
+    k = min(3, len(available))
+    augment_choices = random.sample(available, k)
 
 def apply_augment(aug_id):
     global player_max_hp, player_hp, player_speed
@@ -708,12 +945,14 @@ def fire_bullets():
     for i in range(bullet_straight):
         ox = -total_w // 2 + i * offset_step
         bullets.append([cx + ox, cy, 0, -bullet_speed])
+    # 사선 탄환: 데미지 감소 (쌍이 늘수록 절반씩)
+    spread_dmg = max(0.5, bullet_damage / (2 ** bullet_spread)) if bullet_spread > 0 else bullet_damage
     for pair in range(bullet_spread):
         angle = math.radians(15 + pair * 15)
         dx = bullet_speed * math.sin(angle)
         dy = -bullet_speed * math.cos(angle)
-        bullets.append([cx, cy,  dx, dy])
-        bullets.append([cx, cy, -dx, dy])
+        bullets.append([cx, cy,  dx, dy, spread_dmg])
+        bullets.append([cx, cy, -dx, dy, spread_dmg])
 
 def get_wave_enemy_table(wave):
     if wave <= 1:
@@ -753,8 +992,19 @@ def start_wave(wave_num):
     global laser_state, laser_state_timer, laser_spawn_counter
     global laser_damaged_player, wave_state, wave_kill_goal
     global boss_laser_state, boss_laser_timer, boss_laser_counter
-    global boss_laser_xs, boss_laser_damaged_player, item_spawn_counter
+    global boss_laser_xs, boss_laser_ys, boss_laser_damaged_player, item_spawn_counter
     global boss_intro_timer, boss_charge_timer, boss_charge_phase
+    global _celestial_banner
+
+    # ── 천체 구역 변경 감지 ───────────────────────────────────────────────
+    _old_cel = get_celestial_idx(current_wave)
+    _new_cel = get_celestial_idx(wave_num)
+    if _new_cel != _old_cel and wave_num > 0:
+        _cel_name, _, _, _cel_gc, _, _ = _CELESTIAL_DEFS[_new_cel]
+        _celestial_banner['name']      = _cel_name
+        _celestial_banner['color']     = _cel_gc
+        _celestial_banner['timer']     = _celestial_banner['max_timer']
+        _planet_scaled_cache.clear()   # 스케일 캐시 초기화
 
     current_wave        = wave_num
     wave_kills          = 0
@@ -812,6 +1062,7 @@ def start_wave(wave_num):
     boss_laser_timer          = 0
     boss_laser_counter        = 0
     boss_laser_xs             = []
+    boss_laser_ys             = []
     boss_laser_damaged_player = False
 
 def reset_game():
@@ -884,8 +1135,13 @@ _bgm_duck_timer   = 0
 # ════════════════════════════════════════════════════════════════════════════
 
 def draw_background():
-    global _nebula_y_offset
-    screen.blit(_bg_base, (0, 0))
+    global _nebula_y_offset, _planet_scroll_y
+
+    # ── 천체 환경 그라디언트 ─────────────────────────────────────────────
+    cel_idx = get_celestial_idx(current_wave)
+    screen.blit(_CELESTIAL_BG_CACHE.get(cel_idx, _bg_base), (0, 0))
+
+    # ── 성운 ─────────────────────────────────────────────────────────────
     _nebula_y_offset += 0.08
     if _nebula_y_offset >= SCREEN_HEIGHT:
         _nebula_y_offset -= SCREEN_HEIGHT
@@ -893,13 +1149,26 @@ def draw_background():
     screen.blit(_nebula_surf, (0, -SCREEN_HEIGHT + oy))
     if oy < SCREEN_HEIGHT:
         screen.blit(_nebula_surf, (0, oy))
+
+    # ── 행성 / 항성 (위→아래 천천히 이동) ───────────────────────────────
+    scaled_p = _get_scaled_planet(cel_idx, current_wave)
+    if scaled_p:
+        pw, ph = scaled_p.get_size()
+        _planet_scroll_y += _planet_scroll_speed
+        # 행성이 완전히 화면 아래로 나가면 화면 위로 재진입
+        if _planet_scroll_y > SCREEN_HEIGHT + ph // 2:
+            _planet_scroll_y = -ph // 2
+        px = SCREEN_WIDTH // 2 - pw // 2
+        py = int(_planet_scroll_y) - ph // 2
+        screen.blit(scaled_p, (px, py))
+
+    # ── 별 ────────────────────────────────────────────────────────────────
     tick_s = pygame.time.get_ticks() * 0.001
     for star in stars:
         star[1] += star[3]
         if star[1] > SCREEN_HEIGHT:
             star[1] = 0
             star[0] = random.randint(0, SCREEN_WIDTH)
-        # 별 깜빡임: 각 별의 위상(star[6]) 사용
         flicker = 0.7 + 0.3 * math.sin(tick_s * (1.2 + star[5] * 0.3) + star[6])
         base = star[4]
         col = (min(255, int(base[0] * flicker)),
@@ -911,19 +1180,15 @@ def draw_background():
     for bs in bright_stars:
         bx, by, bcol, bphase = bs
         pulse = 0.75 + 0.25 * math.sin(tick_s * 0.9 + bphase)
-        # 코어
         core_r = int(3 * pulse)
         if core_r > 0:
             pygame.draw.circle(screen, bcol, (bx, by), core_r)
-        # 글로우 헤일로
         for gr in [8, 5]:
             gs = pygame.Surface((gr*2+1, gr*2+1), pygame.SRCALPHA)
             ga = int(40 * pulse * (1 - gr/12))
             pygame.draw.circle(gs, bcol+(ga,), (gr, gr), gr)
             screen.blit(gs, (bx-gr, by-gr))
-        # 십자 광망 (spike)
         spike_len = int(14 * pulse)
-        spike_col = (min(255,bcol[0]), min(255,bcol[1]), min(255,bcol[2]), int(120*pulse))
         for dx, dy in [(1,0),(-1,0),(0,1),(0,-1)]:
             for dist in range(1, spike_len):
                 a = int(110 * pulse * (1 - dist / spike_len))
@@ -936,50 +1201,55 @@ def draw_background():
 #  HUD (space_shooter.py)
 # ════════════════════════════════════════════════════════════════════════════
 
+def _hud_text(surf, text, fnt, color, x, y):
+    """아웃라인 있는 HUD 텍스트 (배경 없이 가독성 확보)."""
+    out = fnt.render(text, True, (0, 0, 0))
+    for ox, oy in ((-1,0),(1,0),(0,-1),(0,1)):
+        surf.blit(out, (x+ox, y+oy))
+    surf.blit(fnt.render(text, True, color), (x, y))
+
 def draw_hud():
     hud_height = 70
-    hud_surf = pygame.Surface((SCREEN_WIDTH, hud_height), pygame.SRCALPHA)
-    hud_surf.fill((5, 8, 25, 210))
-    screen.blit(hud_surf, (0, 0))
-    pygame.draw.line(screen, HUD_BORDER, (0, hud_height), (SCREEN_WIDTH, hud_height), 1)
 
     # BEST SCORE (상단 작은 행)
-    best_label = hp_font.render("BEST", True, (80, 110, 160))
-    best_val   = hp_font.render(f"{best_score:,}", True, (150, 175, 215))
-    screen.blit(best_label, (12, 4))
-    screen.blit(best_val,   (12 + best_label.get_width() + 5, 4))
-
-    # 구분선
-    pygame.draw.line(screen, (25, 35, 70), (12, 19), (120, 19), 1)
+    _hud_text(screen, "BEST", hp_font, (80, 110, 160), 12, 4)
+    bv_x = 12 + hp_font.size("BEST")[0] + 5
+    _hud_text(screen, f"{best_score:,}", hp_font, (150, 175, 215), bv_x, 4)
 
     # SCORE (하단 큰 행)
-    score_label = small_font.render("SCORE", True, (120, 150, 200))
-    score_val   = font.render(f"{score:,}", True, SCORE_COL)
-    screen.blit(score_label, (12, 22))
-    screen.blit(score_val,   (12, 38))
+    _hud_text(screen, "SCORE", small_font, (120, 150, 200), 12, 22)
+    _hud_text(screen, f"{score:,}", font, SCORE_COL, 12, 38)
 
-    # WAVE (중앙)
+    # WAVE (중앙) + 현재 천체 이름
     wave_label_text = f"WAVE  {current_wave}"
     if wave_state == 'boss':
         wave_label_text = f"WAVE  {current_wave}  ★BOSS★"
     wt = font.render(wave_label_text, True, WAVE_GOLD)
-    screen.blit(wt, (SCREEN_WIDTH//2 - wt.get_width()//2, 10))
+    draw_text_outlined(screen, wave_label_text, font, WAVE_GOLD,
+                       SCREEN_WIDTH//2 - wt.get_width()//2, 10)
+    # 현재 천체 이름
+    _ci = get_celestial_idx(current_wave)
+    _cname, _, _, _cgc, _, _ = _CELESTIAL_DEFS[_ci]
+    _ct = hp_font.render(f"◆ {_cname}", True, _cgc)
+    _hud_text(screen, f"◆ {_cname}", hp_font, _cgc,
+              SCREEN_WIDTH//2 - _ct.get_width()//2, 56)
     if wave_state == 'playing':
         bar_w = 90
         bar_x = SCREEN_WIDTH//2 - bar_w//2
-        bar_y = 50
+        bar_y = 48
         ratio  = min(1.0, wave_kills / wave_kill_goal) if wave_kill_goal else 0
+        pygame.draw.rect(screen, (20, 20, 35), (bar_x-1, bar_y-1, bar_w+2, 9), border_radius=3)
         pygame.draw.rect(screen, (30, 30, 50), (bar_x, bar_y, bar_w, 7), border_radius=3)
         if ratio > 0:
             fill_col = (80 + int(175 * ratio), 200 - int(100 * ratio), 80)
             pygame.draw.rect(screen, fill_col, (bar_x, bar_y, int(bar_w * ratio), 7), border_radius=3)
         pygame.draw.rect(screen, (80, 80, 120), (bar_x, bar_y, bar_w, 7), 1, border_radius=3)
         kill_t = hp_font.render(f"{wave_kills}/{wave_kill_goal}", True, (180, 180, 220))
-        screen.blit(kill_t, (bar_x + bar_w + 5, bar_y))
+        _hud_text(screen, f"{wave_kills}/{wave_kill_goal}", hp_font, (180, 180, 220),
+                  bar_x + bar_w + 5, bar_y)
 
     # HP (우측)
-    hp_label = small_font.render("HP", True, (120, 150, 200))
-    screen.blit(hp_label, (SCREEN_WIDTH - 105, 4))
+    _hud_text(screen, "HP", small_font, (120, 150, 200), SCREEN_WIDTH - 105, 4)
     for i in range(player_max_hp):
         bx = SCREEN_WIDTH - 100 + i * 28
         by = 22
@@ -1000,11 +1270,7 @@ def draw_hud():
         bbar_x = SCREEN_WIDTH//2 - bbar_w//2
         bbar_y = 46
         ratio   = boss_hp / boss_max_hp if boss_max_hp else 0
-        panel = pygame.Surface((bbar_w + 30, 40), pygame.SRCALPHA)
-        panel.fill((10, 5, 20, 200))
-        screen.blit(panel, (bbar_x - 15, bbar_y - 14))
-        bl = small_font.render(bname, True, (200, 100, 255))
-        screen.blit(bl, (bbar_x, bbar_y - 14))
+        draw_text_outlined(screen, bname, small_font, (200, 100, 255), bbar_x, bbar_y - 14)
         # 보스 인트로 이름 표시
         if boss_intro_timer > 0:
             intro_alpha = min(255, boss_intro_timer * 3)
@@ -1376,13 +1642,10 @@ while running:
                 laser_x = random.randint(50, SCREEN_WIDTH-50)
                 laser_y = random.randint(150, SCREEN_HEIGHT-120)
                 laser_damaged_player = False; laser_spawn_counter = 0
-                sounds['laser_warning'].play()
         elif laser_state == 1:
             laser_state_timer += 1
             if laser_state_timer >= 90:
                 laser_state = 2; laser_state_timer = 0
-                sounds['laser_warning'].stop()
-                sounds['laser_fire'].play()
         elif laser_state == 2:
             laser_state_timer += 1
             if not laser_damaged_player and invincible_timer == 0:
@@ -1407,8 +1670,13 @@ while running:
             b[0] += b[2]; b[1] += b[3]
             if b[1] < 0 or b[0] < 0 or b[0] > SCREEN_WIDTH: bullets.remove(b)
         for eb in enemy_bullets[:]:
-            eb[0] += eb[2]; eb[1] += eb[3]
-            if eb[1] > SCREEN_HEIGHT or eb[0] < 0 or eb[0] > SCREEN_WIDTH: enemy_bullets.remove(eb)
+            if len(eb) == 8:   # S파 탄환: [x, y, 0, dy, AMP, freq, t, spawn_x]
+                eb[6] += 1
+                eb[0] = eb[7] + eb[4] * math.sin(eb[6] * eb[5])
+                eb[1] += eb[3]
+            else:
+                eb[0] += eb[2]; eb[1] += eb[3]
+            if eb[1] > SCREEN_HEIGHT or eb[0] < -20 or eb[0] > SCREEN_WIDTH+20: enemy_bullets.remove(eb)
 
         # ── 유도 미사일 이동 + 매연 ──────────────────────────────────────
         TURN_RATE = 0.04
@@ -1534,14 +1802,20 @@ while running:
 
             boss_shoot_counter += 1
 
-            # ── Boss 1: VULTURE — 5발 스프레드 (40프레임) ────────────────
+            # ── Boss 1: VULTURE — 5발 스프레드 (40프레임) / tier3+ S파 탄환 ──
             if boss_pattern == 1:
                 if boss_shoot_counter >= 40:
                     boss_shoot_counter = 0
                     bx0 = boss_x + boss_width // 2
                     by0 = boss_y + boss_height
-                    for spread in (-0.5, -0.25, 0, 0.25, 0.5):
-                        enemy_bullets.append([bx0, by0, spread * enemy_bullet_speed, enemy_bullet_speed])
+                    if boss_tier >= 3:   # 9웨이브(tier3) 이상: S파 탄환
+                        AMP, freq = 26, 0.14
+                        for sx in [bx0 - 120, bx0, bx0 + 120]:
+                            sx = max(10, min(SCREEN_WIDTH-10, sx))
+                            enemy_bullets.append([float(sx), float(by0), 0, enemy_bullet_speed, AMP, freq, 0, float(sx)])
+                    else:
+                        for spread in (-0.5, -0.25, 0, 0.25, 0.5):
+                            enemy_bullets.append([bx0, by0, spread * enemy_bullet_speed, enemy_bullet_speed])
 
             # ── Boss 2: INFERNO — 3-way + 호밍 미사일 ────────────────────
             elif boss_pattern == 2:
@@ -1624,6 +1898,10 @@ while running:
                         boss_laser_damaged_player = False
                         bcx = boss_x + boss_width // 2
                         boss_laser_xs = [max(8, bcx-120), min(SCREEN_WIDTH-8, bcx+120)]
+                        boss_laser_ys = []
+                        if boss_tier >= 4:   # 20웨이브+: 플레이어 위치 수평 레이저 추가
+                            boss_laser_xs = [player_x + player_width // 2]
+                            boss_laser_ys = [player_y + player_height // 2]
                 elif boss_laser_state == 1:
                     boss_laser_timer += 1
                     if boss_laser_timer >= 90:
@@ -1633,21 +1911,26 @@ while running:
                     if not boss_laser_damaged_player and invincible_timer == 0:
                         pr2 = pygame.Rect(player_x, player_y, player_width, player_height)
                         lw  = 16
+                        hit_laser = False
                         for lx in boss_laser_xs:
                             if pr2.colliderect(pygame.Rect(lx - lw//2, 0, lw, SCREEN_HEIGHT)):
-                                player_hp -= 1
-                                boss_laser_damaged_player = True
-                                damage_flash_timer = 20; invincible_timer = 60
-                                spawn_explosion(player_x+player_width//2,
-                                                player_y+player_height//2, PURPLE, 20)
-                                sounds['player_hit'].play()
-                                if player_hp <= 0:
-                                    game_over = True
-                                    if not _go_sound_played:
-                                        _go_sound_played = True
-                                        sounds['bgm'].fadeout(600)
-                                        sounds['game_over'].play()
-                                break
+                                hit_laser = True; break
+                        for ly in boss_laser_ys:
+                            if pr2.colliderect(pygame.Rect(0, ly - lw//2, SCREEN_WIDTH, lw)):
+                                hit_laser = True; break
+                        if hit_laser:
+                            player_hp -= 1
+                            boss_laser_damaged_player = True
+                            damage_flash_timer = 20; invincible_timer = 60
+                            spawn_explosion(player_x+player_width//2,
+                                            player_y+player_height//2, PURPLE, 20)
+                            sounds['player_hit'].play()
+                            if player_hp <= 0:
+                                game_over = True
+                                if not _go_sound_played:
+                                    _go_sound_played = True
+                                    sounds['bgm'].fadeout(600)
+                                    sounds['game_over'].play()
                     if boss_laser_timer >= 30:
                         boss_laser_state = 0; boss_laser_timer = 0
 
@@ -1723,7 +2006,8 @@ while running:
                 er = pygame.Rect(enemy[0], enemy[1], ew, eh)
                 if br.colliderect(er):
                     if b in bullets: bullets.remove(b)
-                    enemy[3] -= bullet_damage   # AI기말branch.py: bullet_damage 적용
+                    dmg = b[4] if len(b) > 4 else bullet_damage
+                    enemy[3] -= dmg
                     spawn_particles(b[0], b[1], WHITE, 4, (1, 3), (6, 12))
                     if enemy[3] <= 0:
                         if enemy in enemies: enemies.remove(enemy)
@@ -1872,6 +2156,29 @@ while running:
     # ════════════════════════════════════════════════════════════════════════
     draw_background()
 
+    # ── 천체 진입 배너 ────────────────────────────────────────────────────
+    if _celestial_banner['timer'] > 0:
+        _celestial_banner['timer'] -= 1
+        _bt = _celestial_banner['timer']
+        _bmt = _celestial_banner['max_timer']
+        if _bt > _bmt - 25:
+            _ba = int(255 * (_bmt - _bt) / 25)
+        elif _bt < 25:
+            _ba = int(255 * _bt / 25)
+        else:
+            _ba = 255
+        _bname = _celestial_banner['name']
+        _bcol  = _celestial_banner['color']
+        _banner_s = font.render(f"▶ {_bname} 궤도 진입", True, _bcol)
+        _banner_s.set_alpha(_ba)
+        _bx = SCREEN_WIDTH//2 - _banner_s.get_width()//2
+        _by = SCREEN_HEIGHT//2 - 18
+        # 반투명 배경 패널
+        _bg_panel = pygame.Surface((_banner_s.get_width()+24, _banner_s.get_height()+10), pygame.SRCALPHA)
+        _bg_panel.fill((0, 0, 0, int(120 * _ba / 255)))
+        screen.blit(_bg_panel, (_bx-12, _by-5))
+        screen.blit(_banner_s, (_bx, _by))
+
     if wave_state in ('playing', 'boss', 'wave_clear'):
 
         # 플레이어 (무적 중 깜빡임)
@@ -1936,15 +2243,21 @@ while running:
                 ls2.fill(color + (alpha,))
                 screen.blit(ls2, (laser_x - thickness//2, 0))
 
-        # 보스 수직 레이저 (AI기말branch.py)
-        if wave_state == 'boss' and boss_laser_xs:
-            if boss_laser_state == 1 and (pygame.time.get_ticks()//100)%2==0:
+        # 보스 레이저 (수직 + 수평)
+        if wave_state == 'boss' and (boss_laser_xs or boss_laser_ys):
+            blink = boss_laser_state == 1 and (pygame.time.get_ticks()//100)%2==0
+            if blink:
                 for blx in boss_laser_xs:
                     pygame.draw.line(screen, PURPLE, (blx, 0), (blx, SCREEN_HEIGHT), 2)
+                for bly in boss_laser_ys:
+                    pygame.draw.line(screen, PURPLE, (0, bly), (SCREEN_WIDTH, bly), 2)
             elif boss_laser_state == 2:
                 for blx in boss_laser_xs:
                     pygame.draw.rect(screen, PURPLE, (blx-8, 0, 16, SCREEN_HEIGHT))
                     pygame.draw.rect(screen, WHITE,  (blx-3, 0,  6, SCREEN_HEIGHT))
+                for bly in boss_laser_ys:
+                    pygame.draw.rect(screen, PURPLE, (0, bly-8, SCREEN_WIDTH, 16))
+                    pygame.draw.rect(screen, WHITE,  (0, bly-3, SCREEN_WIDTH,  6))
 
         # 파티클
         for p in particles:
