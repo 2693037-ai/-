@@ -113,9 +113,10 @@ laser_damaged_player = False
 boss_laser_state          = 0   # 0=대기, 1=경고(깜빡임), 2=발사
 boss_laser_timer          = 0
 boss_laser_counter        = 0
-boss_laser_xs             = []  # 레이저 X 좌표 목록
+boss_laser_xs             = []  # 레이저 X 좌표 목록 (수직)
+boss_laser_ys             = []  # 레이저 Y 좌표 목록 (수평, 20웨이브+)
 boss_laser_damaged_player = False
-BOSS_LASER_INTERVAL       = 450  # 발사 주기(프레임)
+BOSS_LASER_INTERVAL       = 240  # 발사 주기(프레임, 4초)
 
 # ── 아이템 스폰 카운터 ───────────────────────────────────────────────────
 item_spawn_counter = 0
@@ -188,7 +189,7 @@ AUGMENT_POOL = [
     {
         'id'   : 'bullet_spread',
         'name' : '사선 탄환 +1쌍',
-        'desc' : '좌우 대각선으로\n탄환 1쌍이 추가됩니다.\n(최대 3쌍)',
+        'desc' : '좌우 대각선으로\n탄환 1쌍이 추가됩니다.\n(최대 2쌍, 대미지 감소)',
         'color': LIME,
         'icon' : 'spread',
     },
@@ -218,9 +219,19 @@ AUGMENT_POOL = [
 augment_choices  = []   # 이번에 제시할 3가지 (AUGMENT_POOL에서 무작위 선택)
 augment_hover    = -1   # 마우스 호버 중인 카드 인덱스
 
+def is_augment_maxed(aug_id):
+    if aug_id == 'bullet_straight': return bullet_straight >= 3
+    if aug_id == 'bullet_spread':   return bullet_spread   >= 2
+    if aug_id == 'move_spd':        return player_speed    >= 12
+    if aug_id == 'bullet_spd':      return bullet_speed    >= 20
+    if aug_id == 'fire_rate':       return AUTO_FIRE_INTERVAL <= 4
+    return False
+
 def pick_augment_choices():
     global augment_choices
-    augment_choices = random.sample(AUGMENT_POOL, 3)
+    available = [a for a in AUGMENT_POOL if not is_augment_maxed(a['id'])]
+    k = min(3, len(available))
+    augment_choices = random.sample(available, k)
 
 def apply_augment(aug_id):
     """선택한 증강을 플레이어 스탯에 즉시 적용."""
@@ -237,7 +248,7 @@ def apply_augment(aug_id):
     elif aug_id == 'bullet_straight':
         bullet_straight = min(bullet_straight + 1, 3)
     elif aug_id == 'bullet_spread':
-        bullet_spread   = min(bullet_spread   + 1, 3)
+        bullet_spread   = min(bullet_spread   + 1, 2)
     elif aug_id == 'move_spd':
         player_speed    = min(player_speed    + 1, 12)
     elif aug_id == 'fire_rate':
@@ -300,15 +311,16 @@ def fire_bullets():
     total_w = (bullet_straight - 1) * offset_step
     for i in range(bullet_straight):
         ox = -total_w // 2 + i * offset_step
-        bullets.append([cx + ox, cy, 0, -bullet_speed])
+        bullets.append([cx + ox, cy, 0, -bullet_speed, bullet_damage])
 
-    # ── 사선 탄환: 15° 간격으로 좌우 대칭 쌍
+    # ── 사선 탄환: 15° 간격으로 좌우 대칭 쌍 (대미지는 사선 쌍 수로 나눔)
+    spread_dmg = bullet_damage / (2 ** bullet_spread) if bullet_spread > 0 else bullet_damage
     for pair in range(bullet_spread):
         angle = math.radians(15 + pair * 15)   # 15°, 30°, 45°
         dx = bullet_speed * math.sin(angle)
         dy = -bullet_speed * math.cos(angle)
-        bullets.append([cx, cy,  dx, dy])   # 오른쪽
-        bullets.append([cx, cy, -dx, dy])   # 왼쪽
+        bullets.append([cx, cy,  dx, dy, spread_dmg])   # 오른쪽
+        bullets.append([cx, cy, -dx, dy, spread_dmg])   # 왼쪽
 
 def get_wave_enemy_table(wave):
     """웨이브 번호에 따른 적 타입 확률 테이블 반환 [(type, hp, weight), ...]"""
@@ -353,7 +365,7 @@ def start_wave(wave_num):
     global laser_state, laser_state_timer, laser_spawn_counter
     global laser_damaged_player, wave_state, wave_kill_goal
     global boss_laser_state, boss_laser_timer, boss_laser_counter
-    global boss_laser_xs, boss_laser_damaged_player, item_spawn_counter
+    global boss_laser_xs, boss_laser_ys, boss_laser_damaged_player, item_spawn_counter
 
     current_wave        = wave_num
     wave_kills          = 0
@@ -390,6 +402,7 @@ def start_wave(wave_num):
     boss_laser_timer          = 0
     boss_laser_counter        = 0
     boss_laser_xs             = []
+    boss_laser_ys             = []
     boss_laser_damaged_player = False
     item_spawn_counter        = 0
 
@@ -401,7 +414,7 @@ def reset_game():
     global score, game_over, wave_clear_timer, boss_spawned_count
     global current_wave, wave_state
     global boss_laser_state, boss_laser_timer, boss_laser_counter
-    global boss_laser_xs, boss_laser_damaged_player, item_spawn_counter
+    global boss_laser_xs, boss_laser_ys, boss_laser_damaged_player, item_spawn_counter
 
     player_x          = SCREEN_WIDTH//2 - player_width//2
     player_y          = SCREEN_HEIGHT   - player_height - 20
@@ -452,6 +465,11 @@ while running:
         if event.type == pygame.KEYDOWN:
             if game_over and event.key == pygame.K_r:
                 reset_game()
+            # N키: 현재 웨이브 즉시 클리어 (빠른 이동용)
+            if not game_over and event.key == pygame.K_n and wave_state in ('playing', 'boss'):
+                wave_kills = wave_kill_goal
+                enemies.clear()
+                boss_active = False
             if wave_state == 'augment':
                 if event.key == pygame.K_1 and len(augment_choices) > 0:
                     apply_augment(augment_choices[0]['id']); start_wave(current_wave + 1)
@@ -513,36 +531,42 @@ while running:
             p['x'] += p['dx']; p['y'] += p['dy']; p['life'] -= 1
             if p['life'] <= 0: particles.remove(p)
 
-        # 레이저
-        if laser_state == 0:
-            laser_spawn_counter += 1
-            if laser_spawn_counter >= 450:
-                laser_state = 1; laser_state_timer = 0
-                laser_x = random.randint(50, SCREEN_WIDTH-50)
-                laser_y = random.randint(150, SCREEN_HEIGHT-120)
-                laser_damaged_player = False; laser_spawn_counter = 0
-        elif laser_state == 1:
-            laser_state_timer += 1
-            if laser_state_timer >= 90: laser_state = 2; laser_state_timer = 0
-        elif laser_state == 2:
-            laser_state_timer += 1
-            if not laser_damaged_player:
-                pr = pygame.Rect(player_x, player_y, player_width, player_height)
-                lh = pygame.Rect(0, laser_y-laser_height//2, SCREEN_WIDTH, laser_height)
-                lv = pygame.Rect(laser_x-laser_height//2, 0, laser_height, SCREEN_HEIGHT)
-                if pr.colliderect(lh) or pr.colliderect(lv):
-                    player_hp -= 1; laser_damaged_player = True
-                    spawn_particles(player_x+player_width//2, player_y+player_height//2, RED, 20)
-                    if player_hp <= 0: game_over = True
-            if laser_state_timer >= 30: laser_state = 0; laser_state_timer = 0
+        # 레이저 (일반 웨이브에서만)
+        if wave_state == 'playing':
+            if laser_state == 0:
+                laser_spawn_counter += 1
+                if laser_spawn_counter >= 450:
+                    laser_state = 1; laser_state_timer = 0
+                    laser_x = random.randint(50, SCREEN_WIDTH-50)
+                    laser_y = random.randint(150, SCREEN_HEIGHT-120)
+                    laser_damaged_player = False; laser_spawn_counter = 0
+            elif laser_state == 1:
+                laser_state_timer += 1
+                if laser_state_timer >= 90: laser_state = 2; laser_state_timer = 0
+            elif laser_state == 2:
+                laser_state_timer += 1
+                if not laser_damaged_player:
+                    pr = pygame.Rect(player_x, player_y, player_width, player_height)
+                    lh = pygame.Rect(0, laser_y-laser_height//2, SCREEN_WIDTH, laser_height)
+                    lv = pygame.Rect(laser_x-laser_height//2, 0, laser_height, SCREEN_HEIGHT)
+                    if pr.colliderect(lh) or pr.colliderect(lv):
+                        player_hp -= 1; laser_damaged_player = True
+                        spawn_particles(player_x+player_width//2, player_y+player_height//2, RED, 20)
+                        if player_hp <= 0: game_over = True
+                if laser_state_timer >= 30: laser_state = 0; laser_state_timer = 0
 
         # 탄환 이동
         for b in bullets[:]:
             b[0] += b[2]; b[1] += b[3]
             if b[1] < 0 or b[0] < 0 or b[0] > SCREEN_WIDTH: bullets.remove(b)
         for eb in enemy_bullets[:]:
-            eb[0] += eb[2]; eb[1] += eb[3]
-            if eb[1] > SCREEN_HEIGHT or eb[0] < 0 or eb[0] > SCREEN_WIDTH: enemy_bullets.remove(eb)
+            if len(eb) == 8:   # S파 탄환: [x, y, 0, dy, AMP, freq, t, spawn_x]
+                eb[6] += 1
+                eb[0] = eb[7] + eb[4] * math.sin(eb[6] * eb[5])
+                eb[1] += eb[3]
+            else:
+                eb[0] += eb[2]; eb[1] += eb[3]
+            if eb[1] > SCREEN_HEIGHT or eb[0] < -20 or eb[0] > SCREEN_WIDTH+20: enemy_bullets.remove(eb)
 
         # ── 보스 웨이브 로직 ─────────────────────────────────────────────
         if wave_state == 'boss' and boss_active:
@@ -551,9 +575,19 @@ while running:
             elif boss_x >= SCREEN_WIDTH-boss_width:  boss_x = SCREEN_WIDTH-boss_width; boss_direction = -1
             boss_shoot_counter += 1
             if boss_shoot_counter >= 45:
-                enemy_bullets.append([boss_x+boss_width//2, boss_y+boss_height, 0,                        enemy_bullet_speed])
-                enemy_bullets.append([boss_x+10,            boss_y+boss_height, -0.3*enemy_bullet_speed,  enemy_bullet_speed])
-                enemy_bullets.append([boss_x+boss_width-10, boss_y+boss_height,  0.3*enemy_bullet_speed,  enemy_bullet_speed])
+                boss_tier = current_wave // BOSS_WAVE_INTERVAL
+                bx_c = boss_x + boss_width // 2
+                by   = boss_y + boss_height
+                if boss_tier >= 3:   # 15웨이브+: S자 탄환, 간격 4배(120px)
+                    AMP, freq = 26, 0.14   # AMP=위치 진폭(px), 항상 spawn_x 기준 진동
+                    for sx in [bx_c - 160, bx_c, bx_c + 160]:
+                        enemy_bullets.append([sx, by, 0, enemy_bullet_speed, AMP, freq, 0, sx])
+                else:
+                    bx_l = boss_x + 10
+                    bx_r = boss_x + boss_width - 10
+                    enemy_bullets.append([bx_c, by, 0,                       enemy_bullet_speed])
+                    enemy_bullets.append([bx_l, by, -0.3*enemy_bullet_speed, enemy_bullet_speed])
+                    enemy_bullets.append([bx_r, by,  0.3*enemy_bullet_speed, enemy_bullet_speed])
                 boss_shoot_counter = 0
 
             # ── 보스 수직 레이저 (tier≥2: 10웨이브 이상) ─────────────────
@@ -568,6 +602,10 @@ while running:
                         boss_laser_damaged_player = False
                         bcx = boss_x + boss_width // 2
                         boss_laser_xs = [max(8, bcx-120), min(SCREEN_WIDTH-8, bcx+120)]
+                        boss_laser_ys = []
+                        if boss_tier >= 4:   # 20웨이브+: 플레이어 위치 십자 레이저 추가
+                            boss_laser_xs = [player_x + player_width // 2]
+                            boss_laser_ys = [player_y + player_height // 2]
                 elif boss_laser_state == 1:
                     boss_laser_timer += 1
                     if boss_laser_timer >= 90:
@@ -577,14 +615,19 @@ while running:
                     if not boss_laser_damaged_player:
                         pr2 = pygame.Rect(player_x, player_y, player_width, player_height)
                         lw  = 16
+                        hit = False
                         for lx in boss_laser_xs:
                             if pr2.colliderect(pygame.Rect(lx - lw//2, 0, lw, SCREEN_HEIGHT)):
-                                player_hp -= 1
-                                boss_laser_damaged_player = True
-                                spawn_particles(player_x+player_width//2,
-                                                player_y+player_height//2, PURPLE, 20)
-                                if player_hp <= 0: game_over = True
-                                break
+                                hit = True; break
+                        for ly in boss_laser_ys:
+                            if pr2.colliderect(pygame.Rect(0, ly - lw//2, SCREEN_WIDTH, lw)):
+                                hit = True; break
+                        if hit:
+                            player_hp -= 1
+                            boss_laser_damaged_player = True
+                            spawn_particles(player_x+player_width//2,
+                                            player_y+player_height//2, PURPLE, 20)
+                            if player_hp <= 0: game_over = True
                     if boss_laser_timer >= 30:
                         boss_laser_state = 0; boss_laser_timer = 0
 
@@ -638,7 +681,7 @@ while running:
                 er = pygame.Rect(enemy[0], enemy[1], ew, eh)
                 if br.colliderect(er):
                     if b in bullets: bullets.remove(b)
-                    enemy[3] -= bullet_damage
+                    enemy[3] -= b[4]
                     spawn_particles(b[0], b[1], WHITE, 4)
                     if enemy[3] <= 0:
                         if enemy in enemies: enemies.remove(enemy)
@@ -661,7 +704,7 @@ while running:
                 bossr = pygame.Rect(boss_x, boss_y, boss_width, boss_height)
                 if br.colliderect(bossr):
                     if b in bullets: bullets.remove(b)
-                    boss_hp -= 1
+                    boss_hp -= b[4]
                     spawn_particles(b[0], b[1], WHITE, 4)
                     if boss_hp <= 0:
                         boss_active = False
@@ -794,15 +837,21 @@ while running:
             pygame.draw.rect(screen,RED,  (laser_x-8,0,16,SCREEN_HEIGHT))
             pygame.draw.rect(screen,WHITE,(laser_x-3,0,6,SCREEN_HEIGHT))
 
-        # 보스 수직 레이저
-        if wave_state == 'boss' and boss_laser_xs:
-            if boss_laser_state == 1 and (pygame.time.get_ticks()//100)%2==0:
+        # 보스 레이저 (수직 + 수평)
+        if wave_state == 'boss' and (boss_laser_xs or boss_laser_ys):
+            blink = boss_laser_state == 1 and (pygame.time.get_ticks()//100)%2==0
+            if blink:
                 for blx in boss_laser_xs:
                     pygame.draw.line(screen, PURPLE, (blx, 0), (blx, SCREEN_HEIGHT), 2)
+                for bly in boss_laser_ys:
+                    pygame.draw.line(screen, PURPLE, (0, bly), (SCREEN_WIDTH, bly), 2)
             elif boss_laser_state == 2:
                 for blx in boss_laser_xs:
                     pygame.draw.rect(screen, PURPLE, (blx-8, 0, 16, SCREEN_HEIGHT))
                     pygame.draw.rect(screen, WHITE,  (blx-3, 0,  6, SCREEN_HEIGHT))
+                for bly in boss_laser_ys:
+                    pygame.draw.rect(screen, PURPLE, (0, bly-8, SCREEN_WIDTH, 16))
+                    pygame.draw.rect(screen, WHITE,  (0, bly-3, SCREEN_WIDTH,  6))
 
         # 파티클
         for p in particles:
