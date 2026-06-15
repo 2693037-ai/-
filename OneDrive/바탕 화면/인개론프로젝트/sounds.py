@@ -195,6 +195,65 @@ def _make_game_over():
     return snd
 
 
+def _make_clown_bounce():
+    """삐에로 공 튕김 – 통통 튀는 짧은 탄성음."""
+    dur = 0.12
+    def func(t):
+        freq = 700 * np.exp(-t / 0.04) + 250
+        sig = _sine(t, freq) * 0.55 + _sine(t, freq * 2) * 0.15
+        env = np.exp(-t / 0.04)
+        return sig * env
+    snd = _make_array(dur, func)
+    snd.set_volume(0.35)
+    return snd
+
+
+def _make_laser_warning():
+    """레이저 경고 – 고조되는 전기 차지음 (90프레임 = 약 1.5초 동안 깜빡임)."""
+    dur = 1.4
+    def func(t):
+        # 200Hz → 800Hz 로 상승하는 사인파 (차지 느낌)
+        freq = 200 + 600 * (t / dur) ** 1.5
+        sig = _sine(t, freq) * 0.5 + _sine(t, freq * 1.5) * 0.2
+        # 뒤로 갈수록 점점 커지는 엔벨로프
+        env = (t / dur) * 0.8 + 0.2
+        # 빠른 진폭 진동으로 전기 느낌 추가
+        tremolo = 0.5 + 0.5 * np.abs(np.sin(2 * np.pi * 18 * t))
+        return sig * env * tremolo
+    snd = _make_array(dur, func)
+    snd.set_volume(0.45)
+    return snd
+
+
+def _make_laser_fire():
+    """레이저 발사 – 지잉~ 하는 고주파 지속 빔음."""
+    dur = 0.75
+    def func(t):
+        n = len(t)
+        # 발사 순간 800Hz→300Hz 로 빠르게 내려오는 피치 스윕 (지잉 느낌)
+        freq_sweep = 800 * np.exp(-t / 0.12) + 300
+        sweep = _sine(t, freq_sweep) * 0.55
+
+        # 지속되는 윙윙 레이어: 260Hz 사인 + 520Hz 배음 (두께감)
+        hum = (_sine(t, 260) * 0.30 + _sine(t, 520) * 0.15)
+
+        # 고주파 지잉 레이어: 2.4kHz 얇은 사인 (날카로운 지잉)
+        zing = _sine(t, 2400) * 0.12
+
+        # 아주 약한 노이즈로 질감만 살짝
+        texture = _noise(n) * 0.06
+
+        sig = sweep + hum + zing + texture
+
+        # 앞부분 날카롭게 치고 → 중간까지 지속 → 천천히 감쇠
+        env = (np.exp(-t / 0.04) * 0.5          # 초기 임팩트
+               + np.exp(-t / 0.55) * 0.5)        # 지속 울림
+        return sig * env
+    snd = _make_array(dur, func)
+    snd.set_volume(0.60)
+    return snd
+
+
 def _make_bgm():
     """단순한 전자음 비트 루프 (약 2초)."""
     bpm = 128
@@ -278,5 +337,8 @@ def init_sounds():
     sounds['item']          = _make_item_pickup()
     sounds['wave_clear']    = _make_wave_clear()
     sounds['game_over']     = _make_game_over()
+    sounds['laser_warning'] = _make_laser_warning()
+    sounds['laser_fire']    = _make_laser_fire()
+    sounds['clown_bounce']  = _make_clown_bounce()
     sounds['bgm']           = _make_bgm()
     return sounds
