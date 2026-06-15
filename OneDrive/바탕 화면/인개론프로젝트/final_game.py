@@ -370,6 +370,8 @@ AUTO_FIRE_INTERVAL = 24   # AI기말branch.py 기준 (느린 초기 연사)
 bullet_straight    = 1
 bullet_spread      = 0
 bullet_damage      = 1    # AI기말branch.py 추가: 탄환 대미지
+player_missile_count = 0  # 보유 유도탄 수 (증강으로 +1씩)
+player_missile_timer = 0  # 발사 쿨다운 카운터
 
 player_x = (SCREEN_WIDTH  // 2) - (player_width  // 2)
 player_y = (SCREEN_HEIGHT - player_height - 20)
@@ -398,7 +400,8 @@ item_speed  = 4
 particles = []
 
 # ── 미사일 / 스폰 링 이펙트 ──────────────────────────────────────────────
-clown_balls    = []   # 유도 미사일: [x, y, dx, dy]
+clown_balls    = []   # 유도 미사일 (적→플레이어): [x, y, dx, dy]
+player_missiles = [] # 플레이어 유도탄 (플레이어→적): [x, y, dx, dy]
 number_effects = []   # (미사용, 호환성 유지)
 spawn_rings    = []   # 미니보스 등장 링: {x, y, max_r, life, max_life}
 
@@ -579,7 +582,7 @@ AUGMENT_EVERY = 4
 # ════════════════════════════════════════════════════════════════════════════
 AUGMENT_POOL = [
     {'id':'max_hp',          'name':'최대 체력 +1',    'desc':'최대 HP가 1 증가하고\n현재 HP도 1 회복됩니다.',      'color':HOT_PINK, 'icon':'heart'},
-    {'id':'bullet_spd',      'name':'탄환 속도 +2',    'desc':'발사체가 더 빠르게\n날아갑니다.',                   'color':CYAN,     'icon':'bullet'},
+    {'id':'homing_missile',  'name':'유도탄 +1',        'desc':'3초마다 유도미사일이\n자동 발사됩니다.\n중첩 가능.',         'color':CYAN,     'icon':'missile'},
     {'id':'bullet_straight', 'name':'직선 탄환 +1',    'desc':'정면으로 날아가는\n탄환이 1개 늘어납니다.\n(최대 3발)', 'color':YELLOW, 'icon':'straight'},
     {'id':'bullet_spread',   'name':'사선 탄환 +1쌍',  'desc':'좌우 대각선으로\n탄환 1쌍이 추가됩니다.\n(최대 3쌍)', 'color':LIME,   'icon':'spread'},
     {'id':'move_spd',        'name':'이동 속도 +1',    'desc':'플레이어가 더 빠르게\n이동합니다.',                  'color':GREEN,    'icon':'arrow'},
@@ -598,14 +601,12 @@ def pick_augment_choices():
 def apply_augment(aug_id):
     global player_max_hp, player_hp, player_speed
     global bullet_speed, bullet_straight, bullet_spread, AUTO_FIRE_INTERVAL
-    global bullet_radius, bullet_damage
+    global bullet_radius, bullet_damage, player_missile_count
     if aug_id == 'max_hp':
         player_max_hp += 1
         player_hp = min(player_hp + 1, player_max_hp)
-    elif aug_id == 'bullet_spd':
-        bullet_speed    = min(bullet_speed  + 2, 20)
-        bullet_radius   = min(bullet_radius + 1, 10)
-        _bullet_surf_cache.clear()
+    elif aug_id == 'homing_missile':
+        player_missile_count += 1
     elif aug_id == 'bullet_straight':
         bullet_straight = min(bullet_straight + 1, 3)
     elif aug_id == 'bullet_spread':
@@ -763,7 +764,7 @@ def start_wave(wave_num):
     enemies.clear()
     enemy_bullets.clear()
     items.clear()
-    clown_balls.clear()
+    clown_balls.clear(); player_missiles.clear()
     spawn_rings.clear()
 
     if wave_num % BOSS_WAVE_INTERVAL == 0:
@@ -817,6 +818,7 @@ def reset_game():
     global player_x, player_y, player_hp, player_max_hp
     global player_speed, bullet_speed, bullet_radius, bullet_straight, bullet_spread
     global AUTO_FIRE_INTERVAL, auto_fire_counter, bullet_damage
+    global player_missile_count, player_missile_timer
     global score, game_over, wave_clear_timer, boss_spawned_count
     global damage_flash_timer, invincible_timer, item_spawn_counter
     global _go_sound_played, _bgm_duck_timer
@@ -833,6 +835,8 @@ def reset_game():
     bullet_damage     = 1
     AUTO_FIRE_INTERVAL= 24
     auto_fire_counter = 0
+    player_missile_count = 0
+    player_missile_timer = 0
 
     score              = 0
     game_over          = False
@@ -845,7 +849,7 @@ def reset_game():
     bullets.clear()
     particles.clear()
     popups.clear()
-    clown_balls.clear()
+    clown_balls.clear(); player_missiles.clear()
     spawn_rings.clear()
     _bullet_surf_cache.clear()
 
@@ -1139,6 +1143,16 @@ def draw_augment_screen(tick):
             pygame.draw.circle(screen, WHITE, (icx-8, icy-4), 10)
             pygame.draw.circle(screen, WHITE, (icx+8, icy-4), 10)
             pygame.draw.polygon(screen, WHITE, [(icx-18, icy), (icx, icy+16), (icx+18, icy)])
+        elif ic == 'missile':
+            pygame.draw.polygon(screen, CYAN, [(icx,icy-14),(icx-4,icy-6),(icx+4,icy-6)])
+            pygame.draw.rect(screen, CYAN, (icx-3, icy-7, 6, 14))
+            pygame.draw.polygon(screen, CYAN, [(icx-6,icy+7),(icx-3,icy),(icx-3,icy+7)])
+            pygame.draw.polygon(screen, CYAN, [(icx+6,icy+7),(icx+3,icy),(icx+3,icy+7)])
+            # 곡선 궤적 점선
+            for k in range(4):
+                ox = int(10*math.sin(math.radians(k*25)))
+                oy = k*5 - 8
+                pygame.draw.circle(screen, (150,230,255), (icx+ox+14, icy+oy), 2)
         elif ic == 'bullet':
             pygame.draw.circle(screen, WHITE, (icx, icy-6), 7)
             pygame.draw.rect(screen, WHITE, (icx-5, icy-6, 10, 18))
@@ -1250,7 +1264,7 @@ while running:
                 game_over_tick = 0
             if not game_over and event.key == pygame.K_n and wave_state in ('playing', 'boss'):
                 enemies.clear()
-                clown_balls.clear()
+                clown_balls.clear(); player_missiles.clear()
                 wave_kills = wave_kill_goal
                 wave_state = 'wave_clear'
             # 증강 선택 키보드 단축키 (AI기말branch.py)
@@ -1324,6 +1338,21 @@ while running:
             auto_fire_counter = 0
             fire_bullets()
             sounds['shoot'].play()
+
+        # ── 플레이어 유도탄 자동 발사 (3초 = 180프레임마다) ─────────────
+        if player_missile_count > 0:
+            player_missile_timer += 1
+            if player_missile_timer >= 180:
+                player_missile_timer = 0
+                pmx = player_x + player_width // 2
+                pmy = player_y
+                mspd = bullet_speed * 1.4
+                # player_missile_count 개수만큼 발사 (각도를 살짝씩 벌려서)
+                for mi in range(player_missile_count):
+                    spread_off = (mi - (player_missile_count - 1) / 2) * 0.25
+                    player_missiles.append([float(pmx), float(pmy),
+                                            spread_off * mspd, -mspd])
+                sounds['shoot'].play()
 
         if invincible_timer > 0:
             invincible_timer -= 1
@@ -1410,6 +1439,77 @@ while running:
             if (missile[0] < -30 or missile[0] > SCREEN_WIDTH+30 or
                     missile[1] < -30 or missile[1] > SCREEN_HEIGHT+30):
                 if missile in clown_balls: clown_balls.remove(missile)
+
+        # ── 플레이어 유도탄 이동 + 호밍 + 충돌 ──────────────────────────
+        PM_TURN = 0.05
+        for pm in player_missiles[:]:
+            # 가장 가까운 적 탐색
+            target = None
+            best_d = float('inf')
+            for en in enemies:
+                ex_ = en[0] + enemy_width // 2
+                ey_ = en[1] + enemy_height // 2
+                d = math.sqrt((ex_ - pm[0])**2 + (ey_ - pm[1])**2)
+                if d < best_d:
+                    best_d = d; target = (ex_, ey_)
+            if target is None and wave_state == 'boss' and boss_active:
+                target = (boss_x + boss_width//2, boss_y + boss_height//2)
+            if target:
+                ddx = target[0] - pm[0]; ddy = target[1] - pm[1]
+                dlen = math.sqrt(ddx*ddx + ddy*ddy) or 1
+                spd_pm = math.sqrt(pm[2]**2 + pm[3]**2)
+                pm[2] += ddx/dlen * PM_TURN * spd_pm
+                pm[3] += ddy/dlen * PM_TURN * spd_pm
+                new_s = math.sqrt(pm[2]**2 + pm[3]**2)
+                if new_s > 0:
+                    pm[2] = pm[2]/new_s * spd_pm
+                    pm[3] = pm[3]/new_s * spd_pm
+            pm[0] += pm[2]; pm[1] += pm[3]
+            # 청백 매연 파티클
+            spd_pm2 = math.sqrt(pm[2]**2 + pm[3]**2)
+            if spd_pm2 > 0:
+                ecol2 = random.choice([(100,200,255),(150,230,255),(255,255,255)])
+                particles.append({'x':pm[0]-pm[2]/spd_pm2*7+random.uniform(-2,2),
+                                   'y':pm[1]-pm[3]/spd_pm2*7+random.uniform(-2,2),
+                                   'dx':-pm[2]/spd_pm2*0.5+random.uniform(-0.5,0.5),
+                                   'dy':-pm[3]/spd_pm2*0.5+random.uniform(-0.5,0.5),
+                                   'life':8,'max_life':8,'color':ecol2,'size':random.uniform(1.0,2.5)})
+            # 충돌: 적
+            hit_pm = False
+            pr_pm = pygame.Rect(int(pm[0])-5, int(pm[1])-5, 10, 10)
+            for en in enemies[:]:
+                ew_ = SPLIT_WIDTH if en[2]==5 else enemy_width
+                eh_ = SPLIT_HEIGHT if en[2]==5 else enemy_height
+                if pr_pm.colliderect(pygame.Rect(en[0], en[1], ew_, eh_)):
+                    en[3] -= bullet_damage * 2
+                    spawn_explosion(int(pm[0]), int(pm[1]), CYAN, 12)
+                    if en[3] <= 0:
+                        cx_ = en[0]+ew_//2; cy_ = en[1]+eh_//2
+                        ec_ = {0:(160,120,40),1:ORANGE,2:YELLOW,3:CYAN,4:LIME,5:LIME_DARK,6:HOT_PINK}
+                        spawn_explosion(cx_, cy_, ec_.get(en[2], RED), 20)
+                        sounds['explode'].play()
+                        pts_ = ({4:20,5:15,2:50,1:20,3:30}.get(en[2], 10)) * hp_multiplier(current_wave)
+                        score += pts_; wave_kills += 1
+                        spawn_popup(f"+{pts_}", cx_, cy_, ec_.get(en[2], WHITE))
+                        enemies.remove(en)
+                    hit_pm = True; break
+            # 충돌: 보스
+            if not hit_pm and wave_state == 'boss' and boss_active:
+                if pr_pm.colliderect(pygame.Rect(boss_x, boss_y, boss_width, boss_height)):
+                    boss_hp -= bullet_damage * 2
+                    spawn_explosion(int(pm[0]), int(pm[1]), CYAN, 10)
+                    sounds['boss_hit'].play()
+                    hit_pm = True
+                    if boss_hp <= 0:
+                        boss_active = False
+                        pts_ = 500 + current_wave * 50
+                        score += pts_
+                        spawn_explosion(boss_x+boss_width//2, boss_y+boss_height//2, PURPLE, 50)
+                        spawn_popup(f"+{pts_} BOSS!", boss_x+boss_width//2, boss_y, PURPLE)
+                        sounds['bgm'].fadeout(800); sounds['boss_explode'].play()
+                        wave_kills += 1
+            if hit_pm or (pm[0]<-30 or pm[0]>SCREEN_WIDTH+30 or pm[1]<-30 or pm[1]>SCREEN_HEIGHT+30):
+                if pm in player_missiles: player_missiles.remove(pm)
 
         # ── 스폰 링 이펙트 업데이트 ──────────────────────────────────────
         for ring in spawn_rings[:]:
@@ -1744,7 +1844,7 @@ while running:
             wave_state       = 'wave_clear'
             wave_clear_timer = 0
             enemies.clear(); enemy_bullets.clear(); bullets.clear()
-            clown_balls.clear(); spawn_rings.clear()
+            clown_balls.clear(); player_missiles.clear(); spawn_rings.clear()
             sounds['bgm'].set_volume(0.08)
             sounds['wave_clear'].play()
             _bgm_duck_timer = 90
@@ -1875,6 +1975,21 @@ while running:
                 rot_surf = pygame.transform.rotate(MISSILE_SURF, ang)
                 screen.blit(rot_surf, (int(missile[0]) - rot_surf.get_width()//2,
                                        int(missile[1]) - rot_surf.get_height()//2))
+
+        # 플레이어 유도탄 (청록색 미사일)
+        for pm in player_missiles:
+            spd_pm = math.sqrt(pm[2]**2 + pm[3]**2)
+            if spd_pm > 0:
+                ang_pm = -math.degrees(math.atan2(pm[2], -pm[3]))
+                pm_surf = pygame.Surface((8, 22), pygame.SRCALPHA)
+                pygame.draw.polygon(pm_surf, (80, 220, 255), [(4,0),(1,6),(7,6)])
+                pygame.draw.rect(pm_surf, (20, 160, 200), (2, 5, 4, 13))
+                pygame.draw.line(pm_surf, (180, 255, 255), (4, 2), (4, 14), 1)
+                pygame.draw.polygon(pm_surf, (10, 100, 150), [(0,21),(3,14),(3,21)])
+                pygame.draw.polygon(pm_surf, (10, 100, 150), [(8,21),(5,14),(5,21)])
+                rot_pm = pygame.transform.rotate(pm_surf, ang_pm)
+                screen.blit(rot_pm, (int(pm[0]) - rot_pm.get_width()//2,
+                                     int(pm[1]) - rot_pm.get_height()//2))
 
         # 아이템
         for item in items:
